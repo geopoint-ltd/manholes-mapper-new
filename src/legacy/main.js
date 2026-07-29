@@ -30,7 +30,7 @@
 // IndexedDB bridge moved to src/state/persistence.js and src/db.js
 import { restoreFromIndexedDbIfNeeded, idbSaveCurrentCompat, idbSaveRecordCompat, idbDeleteRecordCompat } from '../state/persistence.js';
 import { encodeUtf16LeWithBom } from '../utils/encoding.js';
-import { sanitizeMeasurement, isSuspiciousDepth } from '../utils/measurement.js';
+import { sanitizeMeasurement, isSuspiciousDepth, setDepthWarning } from '../utils/measurement.js';
 import { distanceToSegment } from '../utils/geometry.js';
 import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused } from '../dom/dom-utils.js';
@@ -2253,7 +2253,7 @@ function renderDetails() {
               const sanitized = sanitizeMeasurement(raw);
               if (sanitized !== raw) ev.target.value = sanitized;
               if (isTail) e.tail_measurement = sanitized; else e.head_measurement = sanitized;
-              if (isSuspiciousDepth(sanitized)) window.showToast('⚠️ עומק גדול מ-10 מ׳ — אולי חסרה נקודה עשרונית?');
+              setDepthWarning(ev.target, isSuspiciousDepth(sanitized));
               computeNodeTypes();
               debouncedSaveToStorage();
               scheduleDraw();
@@ -2612,7 +2612,7 @@ function renderDetails() {
           e.target.value = sanitized;
         }
         edge.tail_measurement = sanitized;
-        if (isSuspiciousDepth(sanitized)) window.showToast('⚠️ עומק גדול מ-10 מ׳ — אולי חסרה נקודה עשרונית?');
+        setDepthWarning(e.target, isSuspiciousDepth(sanitized));
         // Recompute node types because missing measurement may affect connected node type
         computeNodeTypes();
         debouncedSaveToStorage();
@@ -2627,7 +2627,7 @@ function renderDetails() {
           e.target.value = sanitized;
         }
         edge.head_measurement = sanitized;
-        if (isSuspiciousDepth(sanitized)) window.showToast('⚠️ עומק גדול מ-10 מ׳ — אולי חסרה נקודה עשרונית?');
+        setDepthWarning(e.target, isSuspiciousDepth(sanitized));
         computeNodeTypes();
         debouncedSaveToStorage();
         scheduleDraw();

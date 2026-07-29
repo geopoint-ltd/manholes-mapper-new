@@ -2205,3 +2205,17 @@ input.floating-keyboard-active {
   }
 }
 
+
+/* Persistent inline warning for suspicious pipe depth (> 10 m). Stays next to the
+   input until the value is corrected or the details panel closes. Amber tones read
+   on both light and dark themes. */
+.depth-warning {
+  color: #d97706;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
