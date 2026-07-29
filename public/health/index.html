@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PWA Health</title>
+    <meta name="theme-color" content="#2563eb" />
+    <link rel="manifest" href="../manifest.json" />
+    <link rel="icon" type="image/png" href="../app_icon.png" />
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; padding: 16px; line-height: 1.5; }
+      h1 { margin: 0 0 12px; font-size: 20px; }
+      .note { color: #555; margin-bottom: 12px; }
+      .ok { color: #0a7d33; }
+      .bad { color: #b00020; }
+      .kv div { margin: 6px 0; }
+      code { background: #f6f8fa; padding: 1px 4px; border-radius: 3px; }
+    </style>
+  </head>
+  <body>
+    <h1>Offline Checklist</h1>
+    <div class="note">Use this page to verify service worker, cache and storage health.</div>
+    <div class="kv" id="kv"></div>
+
+    <script>
+    (function ensureSW(){
+      if (!('serviceWorker' in navigator)) return;
+      // Register using absolute path from this subdirectory
+      navigator.serviceWorker.register('/service-worker.js').catch(()=>{});
+    })();
+    </script>
+
+    <script>
+    (async () => {
+      const log = (k,v)=>document.getElementById('kv').insertAdjacentHTML('beforeend', `<div><b>${k}:</b> <span>${typeof v==='object'?JSON.stringify(v):String(v)}</span></div>`);
+      log('navigator.onLine', navigator.onLine);
+
+      try {
+        const reg = await navigator.serviceWorker?.ready;
+        log('SW ready', !!reg);
+        log('SW scope', reg?.scope || '—');
+        log('SW script URL', reg?.active?.scriptURL || '—');
+      } catch(e){ log('SW ready error', e && e.message ? e.message : String(e)); }
+
+      try {
+        const keys = await caches.keys();
+        log('Cache keys', keys.join(', ') || '—');
+        const path = location.pathname;
+        const normalized = path.endsWith('/') ? path.slice(0, -1) : path;
+        const candidates = [
+          location.href,
+          location.origin + path,
+          location.origin + (path.endsWith('/') ? path : path + '/'),
+          location.origin + normalized + '/index.html',
+          location.origin + '/health/index.html'
+        ];
+        let found = false; let matched = '';
+        for (const key of keys) {
+          const cache = await caches.open(key);
+          for (const url of candidates) {
+            const res = await cache.match(new Request(url));
+            if (res) { found = true; matched = url; break; }
+          }
+          if (found) break;
+        }
+        log('HTML cached', found);
+        if (found) log('Matched URL', matched);
+      } catch(e){ log('Cache error', e && e.message ? e.message : String(e)); }
+
+      try {
+        const dbReq = indexedDB.open('pwa-health', 1);
+        dbReq.onupgradeneeded = e=>e.target.result.createObjectStore('kv');
+        dbReq.onsuccess = () => {
+          const db = dbReq.result;
+          const tx = db.transaction('kv', 'readwrite');
+          tx.objectStore('kv').put('ok','ping');
+          tx.oncomplete = () => {
+            const tx2 = db.transaction('kv','readonly');
+            const get = tx2.objectStore('kv').get('ping');
+            get.onsuccess = ()=>log('IndexedDB R/W', get.result === 'ok');
+          };
+        };
+        dbReq.onerror = () => log('IndexedDB error', dbReq.error && dbReq.error.message || 'open failed');
+      } catch(e){ log('IndexedDB error', e && e.message ? e.message : String(e)); }
+    })();
+    </script>
+  </body>
+  </html>
+
+

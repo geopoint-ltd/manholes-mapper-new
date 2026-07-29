@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <!-- Material Icons for modern button symbols -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <!-- Enable standalone mode on iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- Legacy Android standalone (modern Chrome uses manifest display=standalone) -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Apple touch icon for iOS home screen (omit sizes so Safari picks best) -->
+    <meta name="apple-mobile-web-app-title" content="Manhole Mapper (ממפה שוחות)" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./app_icon.png?v=3" />
+    <!-- Preconnect and load a modern sans‑serif font for improved typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/png" href="./app_icon.png?v=3" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Manhole Mapper (ממפה שוחות)</title>
+    <!-- Styles moved to styles.css -->
+  </head>
+  <body>
+    <header class="soft-blue-header">
+      <div id="brand">
+        <img id="brandLogo" src="./geopoint_logo.png" alt="Geopoint" />
+        <h1 id="appTitle">Manhole Mapper (ממפה שוחות)</h1>
+      </div>
+      <div id="controls">
+        <!-- Primary actions -->
+        <div class="toolbar-group">
+          <button id="newSketchBtn" class="btn btn-ghost" title="">
+            <span class="material-icons">note_add</span>
+            <span class="label"></span>
+          </button>
+          <button id="saveBtn" class="btn btn-ghost" title="">
+            <span class="material-icons">save</span>
+            <span class="label"></span>
+          </button>
+        </div>
+
+        <!-- Search node by ID -->
+        <div class="toolbar-group search-group">
+          <div class="search-container">
+            <span class="material-icons search-icon">search</span>
+            <input 
+              id="searchNodeInput" 
+              type="text" 
+              placeholder="" 
+              title=""
+              class="search-input"
+            />
+          </div>
+        </div>
+
+        
+
+        <!-- Export controls -->
+        <div class="toolbar-group">
+          <div class="segmented">
+            <button id="exportSketchBtn" class="btn btn-icon" title="">
+              <span class="material-icons">download</span>
+            </button>
+            <button id="importSketchBtn" class="btn btn-icon" title="">
+              <span class="material-icons">upload</span>
+            </button>
+            <button id="exportNodesBtn" class="btn btn-icon" title="">
+              <span class="material-icons">donut_large</span>
+              <span class="badge-icon material-icons" aria-hidden="true">description</span>
+            </button>
+            <button id="exportEdgesBtn" class="btn btn-icon" title="">
+              <span class="material-icons">call_split</span>
+              <span class="badge-icon material-icons" aria-hidden="true">description</span>
+            </button>
+          </div>
+        </div>
+        <!-- Hidden file input for importing sketches -->
+        <input type="file" id="importSketchFile" accept="application/json,.json" style="display:none;" />
+
+        <!-- Size controls -->
+        <div class="toolbar-group">
+          <div class="segmented">
+            <button id="sizeDecreaseBtn" class="btn btn-icon" title="">
+              <span class="material-icons">remove_circle_outline</span>
+            </button>
+            <button id="sizeIncreaseBtn" class="btn btn-icon" title="">
+              <span class="material-icons">add_circle_outline</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Autosave toggle -->
+        <div class="toolbar-group">
+          <label class="btn btn-ghost autosave-btn">
+            <input id="autosaveToggle" type="checkbox" />
+            <span class="label"></span>
+          </label>
+        </div>
+
+        <!-- Language selector -->
+        <div class="toolbar-group">
+          <select id="langSelect" class="btn btn-ghost" title="">
+            <option value="he">עברית</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
+        <!-- Utility actions -->
+        <div class="toolbar-group">
+          <button id="helpBtn" class="btn btn-ghost btn-icon" title="">
+            <span class="material-icons">help_outline</span>
+          </button>
+          <button id="adminBtn" class="btn btn-ghost btn-icon" title="">
+            <span class="material-icons">tune</span>
+          </button>
+          <button id="homeBtn" class="btn btn-ghost" title="">
+            <span class="material-icons">home</span>
+            <span class="label"></span>
+          </button>
+        </div>
+      </div>
+      <!-- Mobile only: toggle to open overflow menu (moved outside #controls so it remains visible on small screens) -->
+      <button id="mobileMenuBtn" class="btn btn-ghost" title="">
+        <span class="material-icons">menu</span>
+      </button>
+    </header>
+
+    <!-- Mobile overflow menu. This menu is hidden on larger screens and shows a vertical list of actions on small screens. -->
+    <div id="mobileMenu" class="mobile-menu" style="display:none;">
+      <button id="mobileHomeBtn" class="btn" title="">
+        <span class="material-icons">home</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileNewSketchBtn" class="btn" title="">
+        <span class="material-icons">note_add</span>
+        <span class="label"></span>
+      </button>
+      <!-- Mobile search -->
+      <div class="search-container mobile-search" style="margin-top:0.4rem;">
+        <span class="material-icons search-icon">search</span>
+        <input 
+          id="mobileSearchNodeInput" 
+          type="text" 
+          placeholder="" 
+          title=""
+          class="search-input"
+        />
+      </div>
+      <button id="mobileZoomOutBtn" class="btn" title="">
+        <span class="material-icons">zoom_out</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileZoomInBtn" class="btn" title="">
+        <span class="material-icons">zoom_in</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileSizeDecreaseBtn" class="btn" title="">
+        <span class="material-icons">remove_circle_outline</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileSizeIncreaseBtn" class="btn" title="">
+        <span class="material-icons">add_circle_outline</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileExportSketchBtn" class="btn" title="">
+        <span class="material-icons">download</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileImportSketchBtn" class="btn" title="">
+        <span class="material-icons">upload</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileExportNodesBtn" class="btn" title="">
+        <span class="material-icons">donut_large</span>
+        <span class="label"></span>
+        <span class="file-tag material-icons" aria-hidden="true">description</span>
+      </button>
+      <button id="mobileExportEdgesBtn" class="btn" title="">
+        <span class="material-icons">call_split</span>
+        <span class="label"></span>
+        <span class="file-tag material-icons" aria-hidden="true">description</span>
+      </button>
+      <button id="mobileSaveBtn" class="btn" title="">
+        <span class="material-icons">save</span>
+        <span class="label"></span>
+      </button>
+      <!-- Autosave toggle replicates desktop toggle -->
+      <label id="mobileAutosaveLabel" style="display:flex;align-items:center;gap:6px;margin-top:0.4rem;">
+        <input id="mobileAutosaveToggle" type="checkbox" />
+        <span class="label"></span>
+      </label>
+      <!-- Language selector replicates desktop selector -->
+      <select id="mobileLangSelect" class="btn" style="margin-top:0.4rem;">
+        <option value="he">עברית</option>
+        <option value="en">English</option>
+      </select>
+      <button id="mobileHelpBtn" class="btn" title="" style="margin-top:0.4rem;">
+        <span class="material-icons">help_outline</span>
+        <span class="label"></span>
+      </button>
+      <button id="mobileAdminBtn" class="btn" title="" style="margin-top:0.4rem;">
+        <span class="material-icons">tune</span>
+        <span class="label"></span>
+      </button>
+    </div>
+    <!-- Dedicated Admin Screen (separate from the canvas) -->
+    <div id="adminScreen" style="display:none;">
+      <div class="panel admin-container" style="margin:1rem auto;">
+        <div class="admin-header">
+          <h2 id="adminScreenTitle">
+            <span class="material-icons">settings</span>
+            הגדרות מנהל מתקדמות
+          </h2>
+        </div>
+        <div id="adminScreenContent" class="admin-content"></div>
+        <div class="admin-actions">
+          <div class="admin-import-export">
+            <input id="adminScreenImportFile" type="file" accept="application/json,.json" style="display:none;" />
+            <button id="adminScreenImportBtn" class="btn btn-ghost">
+              <span class="material-icons">upload_file</span>
+              <span class="label">יבא הגדרות</span>
+            </button>
+            <button id="adminScreenExportBtn" class="btn btn-ghost">
+              <span class="material-icons">download</span>
+              <span class="label">יצא הגדרות</span>
+            </button>
+          </div>
+          <div style="display:flex;gap:0.75rem;">
+            <button id="adminScreenCancelBtn" class="btn btn-ghost">ביטול</button>
+            <button id="adminScreenSaveBtn" class="btn btn-primary">שמור הגדרות</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="main">
+      <!-- Layout: left = canvas workspace; right = details sidebar -->
+      <div id="canvasContainer">
+        <canvas id="graphCanvas"></canvas>
+        <div class="canvas-toolbar">
+          <div class="segmented" id="modeGroup">
+            <button id="nodeModeBtn" class="btn" title=""></button>
+            <button id="homeNodeModeBtn" class="btn" title=""></button>
+            <button id="drainageNodeModeBtn" class="btn" title=""></button>
+            <button id="edgeModeBtn" class="btn" title=""></button>
+          </div>
+        </div>
+        <div id="toast"></div>
+        <!-- Edge type legend -->
+        <div id="edgeLegend" class="edge-legend"></div>
+        <!-- Recenter view button -->
+        <button id="recenterBtn" class="btn btn-icon canvas-fab" title="" aria-label="">
+          <span class="material-icons">center_focus_strong</span>
+        </button>
+        <!-- Toggle button for floating keyboard (shown when numeric input is focused on mobile) -->
+        <button id="toggleFloatingKeyboard" class="toggle-floating-keyboard" style="display:none;">
+          <span class="material-icons">dialpad</span>
+          <span class="toggle-keyboard-label"></span>
+        </button>
+        <div id="startPanel" style="display: none;">
+          <div class="panel">
+            <h2 id="startTitle">התחלת שרטוט חדש</h2>
+            <label for="dateInput" id="creationDateLabel">תאריך יצירה</label>
+            <input type="date" id="dateInput" />
+            <div class="actions">
+              <button id="cancelBtn" class="btn btn-ghost">ביטול</button>
+              <button id="startBtn" class="btn btn-primary">התחל</button>
+            </div>
+          </div>
+        </div>
+        <div id="homePanel" style="display: none;">
+          <div class="panel">
+            <h2 id="homeTitle">השרטוטים שלי</h2>
+            <div id="sketchList" style="max-height:50vh;overflow:auto;margin-top:0.5rem;"></div>
+            <button id="createFromHomeBtn" class="btn btn-primary" style="margin-top: 0.7rem;">שרטוט חדש</button>
+          </div>
+        </div>
+        <div id="helpModal">
+          <div class="panel">
+            <h2 id="helpTitle">טיפים וקיצורי מקשים</h2>
+            <ul id="helpList">
+              <li>N: מצב שוחה</li>
+              <li>E: מצב קו</li>
+              <li>= / - : זום פנימה / החוצה (0 לאיפוס)</li>
+              <li>גלגלת עכבר מעל הקנבס: זום</li>
+              <li>Esc: ביטול פעולה או ניקוי בחירה</li>
+              <li>Delete/Backspace: מחיקת פריט נבחר</li>
+            </ul>
+            <p id="helpNote">במצב קו, בחר שוחת מקור ואז שוחת יעד.</p>
+            <button class="close-btn" id="closeHelpBtn">סגור</button>
+          </div>
+        </div>
+        <div id="adminModal" style="display:none;">
+          <div class="panel admin-container">
+            <div class="admin-header">
+              <h2 id="adminTitle">
+                <span class="material-icons">tune</span>
+                הגדרות מנהל
+              </h2>
+            </div>
+            <div id="adminContent" class="admin-content"></div>
+            <div class="admin-actions">
+              <div class="admin-import-export">
+                <input id="adminImportFile" type="file" accept="application/json,.json" style="display:none;" />
+                <button id="adminImportBtn" class="btn btn-ghost">
+                  <span class="material-icons">upload_file</span>
+                  <span class="label">יבא הגדרות</span>
+                </button>
+                <button id="adminExportBtn" class="btn btn-ghost">
+                  <span class="material-icons">download</span>
+                  <span class="label">יצא הגדרות</span>
+                </button>
+              </div>
+              <div style="display:flex;gap:0.75rem;">
+                <button id="adminCancelBtn" class="btn btn-ghost">ביטול</button>
+                <button id="adminSaveBtn" class="btn btn-primary">שמור הגדרות</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="sidebar" class="drawer">
+        <div class="sidebar-drag-handle">
+          <div class="drag-handle-bar"></div>
+        </div>
+        <div class="sidebar-header">
+          <h2 id="sidebarTitle">פרטים</h2>
+          <button id="sidebarCloseBtn" class="icon-btn" title="">
+            <span class="material-icons">close</span>
+          </button>
+        </div>
+        <div id="detailsContainer">
+          <p id="detailsDefault">בחר שוחה או קו כדי לערוך.</p>
+        </div>
+      </div>
+    </div>
+    <!-- Floating Keyboard for Mobile Numeric Input -->
+    <div id="floatingKeyboard" class="floating-keyboard" style="display:none;">
+      <div class="floating-keyboard-header">
+        <div class="floating-keyboard-drag-handle">
+          <span class="material-icons">drag_indicator</span>
+        </div>
+        <button id="closeFloatingKeyboard" class="floating-keyboard-close">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+      <div class="floating-keyboard-body">
+        <div class="floating-keyboard-keys">
+          <button class="floating-key" data-key="7">7</button>
+          <button class="floating-key" data-key="8">8</button>
+          <button class="floating-key" data-key="9">9</button>
+          <button class="floating-key" data-key="4">4</button>
+          <button class="floating-key" data-key="5">5</button>
+          <button class="floating-key" data-key="6">6</button>
+          <button class="floating-key" data-key="1">1</button>
+          <button class="floating-key" data-key="2">2</button>
+          <button class="floating-key" data-key="3">3</button>
+          <button class="floating-key" data-key=".">.</button>
+          <button class="floating-key" data-key="0">0</button>
+          <button class="floating-key floating-key-backspace" data-key="backspace">
+            <span class="material-icons">backspace</span>
+          </button>
+        </div>
+      </div>
+      <div class="floating-keyboard-resize-handle"></div>
+    </div>
+    <!-- Application logic and UI behavior (ES Module entry) -->
+    <script type="module" src="./src/main-entry.js"></script>
+  </body>
+</html>

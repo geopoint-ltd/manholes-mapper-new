@@ -1,0 +1,18 @@
+{
+  "short_name": "Manhole | שוחות",
+  "name": "Manhole Mapper (ממפה שוחות)",
+  "icons": [
+    {
+      "src": "app_icon.png",
+      "sizes": "192x192 512x512 1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "description": "Field capture of GPS manholes and invert measurements for ArcGIS pipe gradients."
+}
