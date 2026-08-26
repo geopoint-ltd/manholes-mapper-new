@@ -1,3 +1,5 @@
+import { escapeHtml } from '../dom/dom-utils.js';
+
 /**
  * Build the options editor section for the Admin Modal (richer UI with icons and tables).
  * Returns a detached Element for insertion.
@@ -56,14 +58,14 @@ export function buildOptionsEditorModal(adminConfig, t, title, cfgKey, specs) {
             opts.filter(o => o.enabled !== false).map(o => {
               const value = (spec.valueKind === 'code') ? String(o.code) : String(o.label);
               const text = String(o.label);
-              return `<option value="${value}">${text}</option>`;
+              return `<option value="${escapeHtml(value)}">${escapeHtml(text)}</option>`;
             })
           ).join('');
           const id = `def_${cfgKey}_${spec.key}`;
           return `<div class="field"><label for="${id}">${spec.label}</label><select id="${id}" data-def="${cfgKey}:${spec.key}">${optionsHtml}</select></div>`;
         }
         const id = `def_${cfgKey}_${spec.key}`;
-        return `<div class="field"><label for="${id}">${spec.label}</label><input id="${id}" type="text" value="${current}" data-def="${cfgKey}:${spec.key}" placeholder="${t('admin.placeholders.defaultValue')}"/></div>`;
+        return `<div class="field"><label for="${id}">${spec.label}</label><input id="${id}" type="text" value="${escapeHtml(current)}" data-def="${cfgKey}:${spec.key}" placeholder="${t('admin.placeholders.defaultValue')}"/></div>`;
       }).join('')}
     </div>
   `;
@@ -75,8 +77,8 @@ export function buildOptionsEditorModal(adminConfig, t, title, cfgKey, specs) {
     const opts = adminConfig[cfgKey].options[spec.optionsKey] || [];
     const rows = opts.map((o) => `<tr>
       <td class="opt-enabled" data-label="${t('admin.thEnabled')}"><input type="checkbox" ${o.enabled!==false?'checked':''} data-opt-enabled="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${o.label}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${o.code}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
+      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${escapeHtml(o.label)}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
+      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${escapeHtml(o.code)}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
       <td class="opt-actions" data-label="${t('admin.delete')}"><button class="btn btn-danger btn-sm" title="${t('admin.delete')}" aria-label="${t('admin.delete')}" data-opt-del="${cfgKey}:${spec.optionsKey}">×</button></td>
     </tr>`).join('');
     return `
@@ -154,14 +156,14 @@ export function buildOptionsEditorScreen(adminConfig, t, title, cfgKey, specs) {
             opts.map(o => {
               const value = (spec.valueKind === 'code') ? String(o.code) : String(o.label);
               const text = String(o.label);
-              return `<option value="${value}">${text}</option>`;
+              return `<option value="${escapeHtml(value)}">${escapeHtml(text)}</option>`;
             })
           ).join('');
           const id = `def_${cfgKey}_${spec.key}`;
           return `<div class="field"><label for="${id}">${spec.label}</label><select id="${id}" data-def="${cfgKey}:${spec.key}">${optionsHtml}</select></div>`;
         }
         const id = `def_${cfgKey}_${spec.key}`;
-        return `<div class="field"><label for="${id}">${spec.label}</label><input id="${id}" type="text" value="${current}" data-def="${cfgKey}:${spec.key}"/></div>`;
+        return `<div class="field"><label for="${id}">${spec.label}</label><input id="${id}" type="text" value="${escapeHtml(current)}" data-def="${cfgKey}:${spec.key}"/></div>`;
       }).join('')}
     </div>
   `;
@@ -173,8 +175,8 @@ export function buildOptionsEditorScreen(adminConfig, t, title, cfgKey, specs) {
     const opts = adminConfig[cfgKey].options[spec.optionsKey] || [];
     const rows = opts.map((o) => `<tr>
       <td class="opt-enabled" data-label="${t('admin.thEnabled')}"><input type="checkbox" ${o.enabled!==false?'checked':''} data-opt-enabled="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${o.label}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${o.code}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
+      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${escapeHtml(o.label)}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
+      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${escapeHtml(o.code)}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
       <td class="opt-actions" data-label="${t('admin.delete')}"><button class="btn btn-danger btn-sm" title="${t('admin.delete')}" aria-label="${t('admin.delete')}" data-opt-del="${cfgKey}:${spec.optionsKey}">×</button></td>
     </tr>`).join('');
     return `
