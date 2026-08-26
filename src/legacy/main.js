@@ -1413,6 +1413,10 @@ function saveToLibrary() {
   currentSketchId = record.id;
   // Mirror into IndexedDB
   idbSaveRecordCompat(record);
+  // Announce the write so optional layers (e.g. cloud sync) can mirror it.
+  try {
+    window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: record.id } }));
+  } catch (_) {}
 }
 
 function loadFromLibrary(sketchId) {

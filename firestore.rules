@@ -1,0 +1,85 @@
+rules_version = '2';
+
+// Roles are read from users/{uid}. The client sets them, but every rule below
+// re-reads the document server-side, so a tampered client cannot promote
+// itself: writing your own role is refused, and reading someone else's data
+// requires an admin document that only an admin could have created.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function profileExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && profileExists(request.auth.uid)
+        && profile(request.auth.uid).role == 'admin'
+        && profile(request.auth.uid).disabled != true;
+    }
+
+    // An active, non-disabled member acting on their own data.
+    function isActiveOwner(uid) {
+      return signedIn()
+        && request.auth.uid == uid
+        && (!profileExists(uid) || profile(uid).disabled != true);
+    }
+
+    match /users/{uid} {
+      allow read: if isActiveOwner(uid) || isAdmin();
+
+      // First sign-in self-provisioning: a user may create only their own
+      // document, only as a member, and only enabled. Admins are seeded with
+      // the Admin SDK (scripts/seed-admin.mjs), never from the browser.
+      allow create: if isAdmin()
+        || (signedIn()
+            && request.auth.uid == uid
+            && request.resource.data.role == 'member'
+            && request.resource.data.disabled == false);
+
+      // A member may edit their own display name but never their role or the
+      // disabled flag; an admin may change anything except their own role.
+      allow update: if (isAdmin() && !(uid == request.auth.uid
+                                       && request.resource.data.role != resource.data.role))
+        || (isActiveOwner(uid)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.disabled == resource.data.disabled);
+
+      allow delete: if isAdmin() && uid != request.auth.uid;
+    }
+
+    // A sketch belongs to the member who captured it. Submitting flips a flag;
+    // it never moves the document, so the office reads it where it lies.
+    match /users/{uid}/sketches/{sketchId} {
+      allow read: if isActiveOwner(uid) || isAdmin();
+      allow create, update: if isActiveOwner(uid);
+      allow delete: if isActiveOwner(uid);
+
+      match /attachments/{attachmentId} {
+        allow read: if isActiveOwner(uid) || isAdmin();
+        // Only the owner adds or removes their own evidence.
+        allow create, update, delete: if isActiveOwner(uid);
+      }
+    }
+
+    // Collection-group read for the office inbox. Scoped to admins, and only
+    // for sketches that were actually sent in.
+    match /{path=**}/sketches/{sketchId} {
+      allow read: if isAdmin();
+    }
+
+    match /{path=**}/attachments/{attachmentId} {
+      allow read: if isAdmin();
+    }
+
+    // Anything not matched above is denied.
+  }
+}
