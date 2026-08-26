@@ -29,16 +29,28 @@ export async function restoreFromIndexedDbIfNeeded() {
 }
 
 // Back-compat thin wrappers to be used by legacy code while we migrate call sites.
+//
+// IndexedDB is the durability backup here — localStorage is the primary store —
+// so a failure must never surface to the surveyor. These calls are async, so a
+// bare try/catch would let the rejection escape to window.onunhandledrejection,
+// which the app turns into an on-screen error toast. Swallow it explicitly and
+// log instead, or every save shows a warning the user can do nothing about.
+function ignoreAsyncFailure(promise, label) {
+  Promise.resolve(promise).catch((err) => {
+    console.warn(`${label} failed`, err && err.message ? err.message : err);
+  });
+}
+
 export function idbSaveCurrentCompat(sketch) {
-  try { saveCurrentSketch(sketch); } catch (_) {}
+  try { ignoreAsyncFailure(saveCurrentSketch(sketch), 'idbSaveCurrent'); } catch (_) {}
 }
 
 export function idbSaveRecordCompat(record) {
-  try { saveSketch(record); } catch (_) {}
+  try { ignoreAsyncFailure(saveSketch(record), 'idbSaveRecord'); } catch (_) {}
 }
 
 export function idbDeleteRecordCompat(id) {
-  try { deleteSketch(id); } catch (_) {}
+  try { ignoreAsyncFailure(deleteSketch(id), 'idbDeleteRecord'); } catch (_) {}
 }
 
 

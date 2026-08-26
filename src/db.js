@@ -16,7 +16,75 @@
  */
 
 const DB_NAME = 'graphSketchDB';
-const DB_VERSION = 1;
+
+/** Object stores this app needs, with the options used to create them. */
+const REQUIRED_STORES = [
+  ['sketches', { keyPath: 'id' }],
+  ['currentSketch', { keyPath: 'key' }],
+  ['syncQueue', { autoIncrement: true }],
+];
+
+/** @type {Promise<IDBDatabase>|null} */
+let dbPromise = null;
+
+function createMissingStores(db) {
+  REQUIRED_STORES.forEach(([name, options]) => {
+    if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, options);
+  });
+}
+
+function trackVersionChange(db) {
+  // Another tab upgrading the schema would otherwise block its open request.
+  db.onversionchange = () => {
+    try { db.close(); } catch (_) {}
+    dbPromise = null;
+  };
+}
+
+/**
+ * Open `graphSketchDB` at whatever version already exists on this origin.
+ *
+ * IndexedDB is scoped per origin, not per path, so every app published under
+ * the same github.io account shares this database. A sibling app carries a
+ * higher schema version, and opening with a hardcoded lower number threw
+ * "The requested version (1) is less than the existing version (3)" on every
+ * save. Adopting the existing version instead — and stepping it up only when a
+ * store we need is genuinely absent — lets both apps share the origin.
+ *
+ * @returns {Promise<IDBDatabase>}
+ */
+function openDbInternal() {
+  return new Promise((resolve, reject) => {
+    // No version argument: adopt the current one, or create the DB at 1.
+    const request = indexedDB.open(DB_NAME);
+    request.onupgradeneeded = (event) => {
+      createMissingStores(/** @type {IDBDatabase} */ (event.target.result));
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const missing = REQUIRED_STORES.some(([name]) => !db.objectStoreNames.contains(name));
+      if (!missing) {
+        trackVersionChange(db);
+        resolve(db);
+        return;
+      }
+      // A store we need is absent, so step the version up by one to add it
+      // without disturbing stores the sibling app owns.
+      const nextVersion = db.version + 1;
+      db.close();
+      const upgrade = indexedDB.open(DB_NAME, nextVersion);
+      upgrade.onupgradeneeded = (event) => {
+        createMissingStores(/** @type {IDBDatabase} */ (event.target.result));
+      };
+      upgrade.onerror = () => reject(upgrade.error);
+      upgrade.onsuccess = () => {
+        trackVersionChange(upgrade.result);
+        resolve(upgrade.result);
+      };
+    };
+  });
+}
 
 /**
  * Open the IndexedDB database and upgrade schema if necessary.
@@ -24,30 +92,14 @@ const DB_VERSION = 1;
  * @returns {Promise<IDBDatabase>}
  */
 export function openDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = (event) => {
-      const db = /** @type {IDBDatabase} */ (event.target.result);
-      // Create object store for persistent sketches if it doesn't exist
-      if (!db.objectStoreNames.contains('sketches')) {
-        db.createObjectStore('sketches', { keyPath: 'id' });
-      }
-      // Create object store for the current unsaved sketch
-      if (!db.objectStoreNames.contains('currentSketch')) {
-        db.createObjectStore('currentSketch', { keyPath: 'key' });
-      }
-      // Create a syncQueue for future background sync operations
-      if (!db.objectStoreNames.contains('syncQueue')) {
-        db.createObjectStore('syncQueue', { autoIncrement: true });
-      }
-    };
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  if (!dbPromise) {
+    dbPromise = openDbInternal().catch((err) => {
+      // Let the next call retry rather than caching a permanent failure.
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
 }
 
 /**
