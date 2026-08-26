@@ -48,7 +48,6 @@ const newSketchBtn = document.getElementById('newSketchBtn');
 const homeBtn = document.getElementById('homeBtn');
 const nodeModeBtn = document.getElementById('nodeModeBtn');
 const homeNodeModeBtn = document.getElementById('homeNodeModeBtn');
-const drainageNodeModeBtn = document.getElementById('drainageNodeModeBtn');
 const edgeModeBtn = document.getElementById('edgeModeBtn');
 // Separate export buttons for nodes and edges
 const exportNodesBtn = document.getElementById('exportNodesBtn');
@@ -1005,11 +1004,6 @@ function applyLangToStaticUI() {
     homeNodeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">home</span>';
     homeNodeModeBtn.title = t('modeHome');
     homeNodeModeBtn.setAttribute('aria-label', t('modeHome'));
-  }
-  if (drainageNodeModeBtn) {
-    drainageNodeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">water_drop</span>';
-    drainageNodeModeBtn.title = t('modeDrainage');
-    drainageNodeModeBtn.setAttribute('aria-label', t('modeDrainage'));
   }
   if (edgeModeBtn) {
     edgeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">timeline</span>';
@@ -2882,7 +2876,7 @@ function pointerDown(x, y) {
     }
   }
   // Contextual edit: in Node/Home/Drainage mode, allow selecting and dragging existing nodes when clicking on them
-  if ((currentMode === 'node' || currentMode === 'home' || currentMode === 'drainage') && node) {
+  if ((currentMode === 'node' || currentMode === 'home') && node) {
     // Toggle close if clicking the same node again
     if (selectedNode && String(selectedNode.id) === String(node.id)) {
       selectedNode = null;
@@ -2921,12 +2915,6 @@ function pointerDown(x, y) {
       const firstInput = detailsContainer.querySelector('input:not([type="checkbox"]), select, textarea');
       if (firstInput) firstInput.focus();
     }, 0);
-  } else if (currentMode === 'drainage') {
-    const created = createNode(world.x, world.y);
-    // Switch the created node to Drainage type but keep numeric ID (like manholes)
-    created.nodeType = 'Drainage';
-    // Do not enter edit mode or open details; Node mode is for placement only
-    scheduleDraw();
   }
 }
 
@@ -2997,7 +2985,7 @@ canvas.addEventListener('mousedown', (e) => {
       } else {
         // Empty background: prepare to either pan (if moved) or create node on release (node/home/drainage modes)
         mousePanCandidate = true;
-        mouseAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'drainage');
+        mouseAddPending = (currentMode === 'node' || currentMode === 'home');
         mouseAddPoint = { x: e.offsetX, y: e.offsetY };
         panStart = { x: e.clientX, y: e.clientY };
         translateStart = { ...viewTranslate };
@@ -3164,7 +3152,7 @@ canvas.addEventListener('touchstart', (e) => {
         } else {
           // Background: candidate for panning or tap-to-add on release
           touchPanCandidate = true;
-          touchAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'drainage');
+          touchAddPending = (currentMode === 'node' || currentMode === 'home');
           touchAddPoint = { x, y };
         }
       }
@@ -3245,7 +3233,7 @@ canvas.addEventListener('touchend', (e) => {
   }
   if (e.touches.length === 0) {
     // If a tap-to-add is pending and didn't move much, create node now (Node or Home or Drainage mode)
-    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home' || currentMode === 'drainage') && !isDragging) {
+    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home') && !isDragging) {
       const world = screenToWorld(touchAddPoint.x, touchAddPoint.y);
       // Re-check proximity with touch-friendly thresholds to avoid creating next to an existing node/edge
       const nearNode = findNodeAtWithExpansion(world.x, world.y, TOUCH_SELECT_EXPANSION);
@@ -3253,11 +3241,8 @@ canvas.addEventListener('touchend', (e) => {
       if (!nearNode && !nearEdge) {
         const created = createNode(world.x, world.y);
         if (currentMode === 'home' && created) {
-          // Keep numeric ID for home (like manholes/drainage)
+          // Keep numeric ID for home (like manholes)
           created.nodeType = 'Home';
-        } else if (currentMode === 'drainage' && created) {
-          // Keep numeric ID for drainage (like manholes)
-          created.nodeType = 'Drainage';
         }
         scheduleDraw();
       }
@@ -3291,7 +3276,6 @@ newSketchBtn.addEventListener('click', () => {
   currentMode = 'node';
   if (nodeModeBtn) nodeModeBtn.classList.add('active');
   if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
   if (edgeModeBtn) edgeModeBtn.classList.remove('active');
   selectedNode = null;
   selectedEdge = null;
@@ -3321,7 +3305,6 @@ startBtn.addEventListener('click', () => {
   currentMode = 'node';
   if (nodeModeBtn) nodeModeBtn.classList.add('active');
   if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
   if (edgeModeBtn) edgeModeBtn.classList.remove('active');
   selectedNode = null;
   selectedEdge = null;
@@ -3345,7 +3328,6 @@ if (nodeModeBtn) {
     currentMode = 'node';
     nodeModeBtn.classList.add('active');
     if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
     if (edgeModeBtn) edgeModeBtn.classList.remove('active');
     pendingEdgeTail = null;
     pendingEdgePreview = null;
@@ -3361,7 +3343,6 @@ if (homeNodeModeBtn) {
     currentMode = 'home';
     homeNodeModeBtn.classList.add('active');
     if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
     if (edgeModeBtn) edgeModeBtn.classList.remove('active');
     pendingEdgeTail = null;
     pendingEdgePreview = null;
@@ -3371,22 +3352,6 @@ if (homeNodeModeBtn) {
     showToast(t('home'));
   });
 }
-if (drainageNodeModeBtn) {
-  drainageNodeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'drainage';
-    drainageNodeModeBtn.classList.add('active');
-    if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('drainage'));
-  });
-}
 if (edgeModeBtn) {
   edgeModeBtn.addEventListener('click', () => {
     commitIdInputIfFocused();
@@ -3394,7 +3359,6 @@ if (edgeModeBtn) {
     edgeModeBtn.classList.add('active');
     if (nodeModeBtn) nodeModeBtn.classList.remove('active');
     if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
     pendingEdgeTail = null;
     pendingEdgePreview = null;
     selectedNode = null;
@@ -4193,7 +4157,6 @@ async function init() {
   currentMode = 'node';
   if (nodeModeBtn) nodeModeBtn.classList.add('active');
   if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (drainageNodeModeBtn) drainageNodeModeBtn.classList.remove('active');
   if (edgeModeBtn) edgeModeBtn.classList.remove('active');
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
