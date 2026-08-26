@@ -55,3 +55,25 @@ export function syncHeaderHeightVar() {
   } catch (_) {}
 }
 
+
+/**
+ * Escape a value for safe interpolation into HTML markup, both as element text
+ * and inside a double-quoted attribute.
+ *
+ * Several option labels contain characters that are significant to the HTML
+ * parser — most notably the Hebrew material label `פי. וי. סי. לפי ת"י 884`,
+ * whose embedded double quote silently truncates any attribute it is dropped
+ * into. Always run label/user text through this before building markup.
+ *
+ * @param {unknown} value
+ * @returns {string} HTML-safe text
+ */
+export function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

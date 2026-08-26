@@ -33,7 +33,8 @@ import { encodeUtf16LeWithBom } from '../utils/encoding.js';
 import { sanitizeMeasurement, isSuspiciousDepth, setDepthWarning } from '../utils/measurement.js';
 import { distanceToSegment } from '../utils/geometry.js';
 import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
-import { commitIdInputIfFocused } from '../dom/dom-utils.js';
+import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
+import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
 import { drawInfiniteGrid as drawInfiniteGridFeature, renderEdgeLegend as renderEdgeLegendFeature, drawEdge as drawEdgeFeature, drawNode as drawNodeFeature } from '../features/rendering.js';
@@ -358,6 +359,8 @@ let adminConfig = (() => {
     merged.edges.include = merged.edges.include || {};
     merged.nodes.defaults = merged.nodes.defaults || {};
     merged.edges.defaults = merged.edges.defaults || {};
+    // Undo labels that an earlier settings save truncated at an embedded quote
+    repairTruncatedAdminLabels(merged);
     return merged;
   } catch (e) {
     console.warn('Failed to load admin config; using defaults', e);
@@ -1311,6 +1314,8 @@ function loadFromStorage() {
       }
     }
     nextNodeId = maxNumericId + 1;
+    // Recover option values truncated by the old unescaped drawer markup
+    repairTruncatedOptionValues(nodes, edges, adminConfig);
     // Recompute node types based on measurements
     computeNodeTypes();
     return true;
@@ -1461,6 +1466,8 @@ function loadFromLibrary(sketchId) {
   creationDate = rec.creationDate || rec.createdAt || null;
   currentSketchId = rec.id;
   currentSketchName = rec.name || null;
+  // Recover option values truncated by the old unescaped drawer markup
+  repairTruncatedOptionValues(nodes, edges, adminConfig);
   computeNodeTypes();
   saveToStorage();
   draw();
@@ -2081,7 +2088,7 @@ function buildNodeTypeSelectHtml(node) {
   const typeOptions = NODE_TYPE_OPTIONS.map(({ value, i18nKey }) => {
     const label = (typeof t === 'function') ? t(i18nKey) : value;
     const selected = node.nodeType === value ? 'selected' : '';
-    return `<option value="${value}" ${selected}>${label}</option>`;
+    return `<option value="${escapeHtml(value)}" ${selected}>${escapeHtml(label)}</option>`;
   }).join('');
   return `
     <div class="field">
@@ -2106,13 +2113,13 @@ function renderDetails() {
       .filter(o => (o.enabled !== false))
       .map(o => o.label || o);
     nodeMaterialOptionLabels.forEach((mat) => {
-      materialOptions += `<option value="${mat}" ${node.material === mat ? 'selected' : ''}>${mat}</option>`;
+      materialOptions += `<option value="${escapeHtml(mat)}" ${node.material === mat ? 'selected' : ''}>${escapeHtml(mat)}</option>`;
     });
     // Cover diameter as free integer input
     // Access options
     const accessOptions = (adminConfig.nodes?.options?.access ?? NODE_ACCESS_OPTIONS)
       .filter(o => (o.enabled !== false))
-      .map(({ code, label }) => `<option value="${code}" ${Number(node.access)===Number(code)?'selected':''}>${label}</option>`)
+      .map(({ code, label }) => `<option value="${escapeHtml(code)}" ${Number(node.access)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
       .join('');
     
     // Node type options: Manhole, Home, Drainage, Covered
@@ -2120,7 +2127,7 @@ function renderDetails() {
       <div class="details-section">
         <div class="field">
           <label for="idInput">${t('labels.nodeId')}</label>
-          <input id="idInput" type="text" value="${node.id}" dir="auto" />
+          <input id="idInput" type="text" value="${escapeHtml(node.id)}" dir="auto" />
         </div>
         ${buildNodeTypeSelectHtml(node)}
       </div>
@@ -2134,7 +2141,7 @@ function renderDetails() {
         ${idAndTypeSection}
         <div class="field">
           <label for="noteInput">${t('labels.note')}</label>
-          <textarea id="noteInput" rows="3" placeholder="${t('labels.notePlaceholder')}" dir="auto">${node.note || ''}</textarea>
+          <textarea id="noteInput" rows="3" placeholder="${t('labels.notePlaceholder')}" dir="auto">${escapeHtml(node.note || '')}</textarea>
         </div>
         <div class="field">
           <label><input id="directConnectionToggle" type="checkbox" ${node.directConnection ? 'checked' : ''}/> ${dcText}</label>
@@ -2162,24 +2169,24 @@ function renderDetails() {
             ${adminConfig.nodes.include.cover_diameter ? `
             <div class="field">
               <label for="coverDiameterInput">${t('labels.coverDiameter')}</label>
-              <input id="coverDiameterInput" type="number" step="1" min="0" value="${node.coverDiameter !== '' ? node.coverDiameter : ''}" placeholder="${t('labels.optional')}" />
+              <input id="coverDiameterInput" type="number" step="1" min="0" value="${escapeHtml(node.coverDiameter !== '' ? node.coverDiameter : '')}" placeholder="${t('labels.optional')}" />
             </div>` : ''}
             ${adminConfig.nodes.include.maintenance_status ? `
             <div class="field">
               <label for="nodeMaintenanceStatusSelect">${t('labels.maintenanceStatus')}</label>
-              <select id="nodeMaintenanceStatusSelect">${(adminConfig.nodes?.options?.maintenance_status ?? NODE_MAINTENANCE_OPTIONS).filter(o => (o.enabled !== false)).map(({code,label}) => `<option value="${code}" ${Number(node.maintenanceStatus)===Number(code)?'selected':''}>${label}</option>`).join('')}</select>
+              <select id="nodeMaintenanceStatusSelect">${(adminConfig.nodes?.options?.maintenance_status ?? NODE_MAINTENANCE_OPTIONS).filter(o => (o.enabled !== false)).map(({code,label}) => `<option value="${escapeHtml(code)}" ${Number(node.maintenanceStatus)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`).join('')}</select>
             </div>` : ''}
             ${adminConfig.nodes.include.accuracy_level ? `
             <div class="field">
               <label for="accuracyLevelSelect">${t('labels.accuracyLevel')}</label>
-              <select id="accuracyLevelSelect">${(adminConfig.nodes?.options?.accuracy_level ?? NODE_ACCURACY_OPTIONS).filter(o => (o.enabled !== false)).map(({code,label}) => `<option value="${code}" ${Number(node.accuracyLevel)===Number(code)?'selected':''}>${label}</option>`).join('')}</select>
+              <select id="accuracyLevelSelect">${(adminConfig.nodes?.options?.accuracy_level ?? NODE_ACCURACY_OPTIONS).filter(o => (o.enabled !== false)).map(({code,label}) => `<option value="${escapeHtml(code)}" ${Number(node.accuracyLevel)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`).join('')}</select>
             </div>` : ''}
           </div>
         </div>
         <div class="details-section">
           <div class="field">
             <label for="noteInput">${t('labels.note')}</label>
-            <textarea id="noteInput" rows="3" placeholder="${t('labels.notePlaceholder')}" dir="auto">${node.note || ''}</textarea>
+            <textarea id="noteInput" rows="3" placeholder="${t('labels.notePlaceholder')}" dir="auto">${escapeHtml(node.note || '')}</textarea>
           </div>
         </div>
       `;
@@ -2207,12 +2214,12 @@ function renderDetails() {
           const inputId = `edgeMeasure_${e.id}_${isTail ? 'tail' : 'head'}`;
           const matId = `edgeMaterial_${e.id}`;
           const diamSelectId = `edgeDiameterSelect_${e.id}`;
-          const materialOptions = edgeMaterialOptionLabels.map((m) => `<option value="${m}" ${e.material === m ? 'selected' : ''}>${m}</option>`).join('');
+          const materialOptions = edgeMaterialOptionLabels.map((m) => `<option value="${escapeHtml(m)}" ${e.material === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
           const currentDiameterIndex = diameterIndexFromCode(e.line_diameter);
           html += `
             <div class="field">
               <label for="${inputId}">${measureLabel}</label>
-              <input id="${inputId}" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${isTail ? (e.tail_measurement || '') : (e.head_measurement || '')}" placeholder="${t('labels.optional')}" dir="auto" />
+              <input id="${inputId}" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(isTail ? (e.tail_measurement || '') : (e.head_measurement || ''))}" placeholder="${t('labels.optional')}" dir="auto" />
             </div>
             <div class="field">
               <label for="${matId}">${t('labels.edgeMaterial')}</label>
@@ -2222,7 +2229,7 @@ function renderDetails() {
               <label for="${diamSelectId}">${t('labels.lineDiameter')}</label>
               <select id="${diamSelectId}">
                 <option value="" ${e.line_diameter===''?'selected':''}>${t('labels.optional')}</option>
-                ${diameterOptions.map((d) => `<option value="${String(d.code)}" ${String(e.line_diameter)===String(d.code)?'selected':''}>${String(d.label)}</option>`).join('')}
+                ${diameterOptions.map((d) => `<option value="${escapeHtml(d.code)}" ${String(e.line_diameter)===String(d.code)?'selected':''}>${escapeHtml(d.label)}</option>`).join('')}
               </select>
             </div>
           `;
@@ -2443,7 +2450,7 @@ function renderDetails() {
       .filter(o => (o.enabled !== false))
       .map(o => o.label || o);
     edgeMaterialOptionLabels.forEach((m) => {
-      materialOptions += `<option value="${m}" ${edge.material === m ? 'selected' : ''}>${m}</option>`;
+      materialOptions += `<option value="${escapeHtml(m)}" ${edge.material === m ? 'selected' : ''}>${escapeHtml(m)}</option>`;
     });
     // Compute current material code based on label
     const materialCodeFor = (label) => {
@@ -2459,11 +2466,11 @@ function renderDetails() {
       .filter(o => (o.enabled !== false))
       .map(o => o.label || o);
     edgeTypeOptionLabels.forEach((et) => {
-      edgeTypeOptions += `<option value="${et}" ${edge.edge_type === et ? 'selected' : ''}>${et}</option>`;
+      edgeTypeOptions += `<option value="${escapeHtml(et)}" ${edge.edge_type === et ? 'selected' : ''}>${escapeHtml(et)}</option>`;
     });
     // Engineering status options for edge
     const edgeEngineeringOptions = (adminConfig.edges?.options?.engineering_status ?? EDGE_ENGINEERING_STATUS)
-      .map(({ code, label }) => `<option value="${code}" ${Number(edge.engineeringStatus)===Number(code)?'selected':''}>${label}</option>`)
+      .map(({ code, label }) => `<option value="${escapeHtml(code)}" ${Number(edge.engineeringStatus)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
       .join('');
     // Normalize line diameter options for slider
     const diameterOptions = (adminConfig.edges?.options?.line_diameter ?? EDGE_LINE_DIAMETERS)
@@ -2480,7 +2487,7 @@ function renderDetails() {
       <div class="details-section">
         <div class="details-grid two-col">
           <div class="field col-span-2">
-            <div>${edge.tail} ${isRTL(currentLang) ? '←' : '→'} ${edge.head}</div>
+            <div>${escapeHtml(edge.tail)} ${isRTL(currentLang) ? '←' : '→'} ${escapeHtml(edge.head)}</div>
           </div>
         </div>
       </div>
@@ -2505,7 +2512,7 @@ function renderDetails() {
             <label for="edgeDiameterSelect">${t('labels.lineDiameter')}</label>
             <select id="edgeDiameterSelect">
               <option value="" ${edge.line_diameter===''?'selected':''}>${t('labels.optional')}</option>
-              ${diameterOptions.map((d) => `<option value="${String(d.code)}" ${String(edge.line_diameter)===String(d.code)?'selected':''}>${String(d.label)}</option>`).join('')}
+              ${diameterOptions.map((d) => `<option value="${escapeHtml(d.code)}" ${String(edge.line_diameter)===String(d.code)?'selected':''}>${escapeHtml(d.label)}</option>`).join('')}
             </select>
           </div>` : ''}
         </div>
@@ -2517,7 +2524,7 @@ function renderDetails() {
           ${adminConfig.edges.include.fall_depth ? `
           <div class="field">
             <label for="fallDepthInput">${t('labels.fallDepth')}</label>
-            <input id="fallDepthInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${edge.fall_depth || ''}" placeholder="${t('labels.optional')}" dir="auto" />
+            <input id="fallDepthInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(edge.fall_depth || '')}" placeholder="${t('labels.optional')}" dir="auto" />
           </div>` : ''}
           ${adminConfig.edges.include.fall_position ? `
           <div class="field">
@@ -2526,7 +2533,7 @@ function renderDetails() {
               <option value="" ${edge.fall_position===''?'selected':''}>${t('labels.optional')}</option>
               ${(adminConfig.edges?.options?.fall_position || [{code:0,label:'פנימי'},{code:1,label:'חיצוני'}])
                 .filter(o => (o.enabled !== false))
-                .map(({code,label}) => `<option value="${String(code)}" ${Number(edge.fall_position)===Number(code)?'selected':''}>${label}</option>`)
+                .map(({code,label}) => `<option value="${escapeHtml(code)}" ${Number(edge.fall_position)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
                 .join('')}
             </select>
           </div>` : ''}
@@ -2539,12 +2546,12 @@ function renderDetails() {
           ${adminConfig.edges.include.tail_measurement ? `
           <div class="field">
             <label for="tailInput">${t('labels.tailMeasure')}</label>
-            <input id="tailInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${edge.tail_measurement || ''}" placeholder="${t('labels.optional')}" dir="auto" />
+            <input id="tailInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(edge.tail_measurement || '')}" placeholder="${t('labels.optional')}" dir="auto" />
           </div>` : ''}
           ${adminConfig.edges.include.head_measurement ? `
           <div class="field">
             <label for="headInput">${t('labels.headMeasure')}</label>
-            <input id="headInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${edge.head_measurement || ''}" placeholder="${t('labels.optional')}" dir="auto" />
+            <input id="headInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(edge.head_measurement || '')}" placeholder="${t('labels.optional')}" dir="auto" />
           </div>` : ''}
         </div>
       </div>` : ''}
@@ -2553,7 +2560,7 @@ function renderDetails() {
       <div class="details-section">
         <div class="field">
           <div class="field-label">${t('labels.targetNote')}</div>
-          <div class="muted">${headNode.note}</div>
+          <div class="muted">${escapeHtml(headNode.note)}</div>
         </div>
       </div>` : ''}
 
@@ -3518,7 +3525,9 @@ if (importSketchBtn && importSketchFile) {
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
       currentSketchName = importedSketch.sketchName;
-      
+
+      // Recover option values truncated by the old unescaped drawer markup
+      repairTruncatedOptionValues(nodes, edges, adminConfig);
       // Recompute node types and save
       computeNodeTypes();
       saveToStorage();
