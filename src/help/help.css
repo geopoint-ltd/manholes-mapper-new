@@ -145,6 +145,9 @@ body.help-open { overflow: hidden; }
    body text, and uses the normal text colour: --color-muted was too faint here
    and disappeared entirely once the text was selected. */
 .help-section__head {
+  /* It is a <header>, so say plainly that it does not pin itself. The app's
+     top-bar rule used to reach it and make it sticky. */
+  position: static;
   margin-bottom: 0.85rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -340,14 +343,17 @@ body.help-open { overflow: hidden; }
     border-radius: 10px;
     min-height: 44px;
   }
+  /* One column, deliberately.
+     This was `columns: 2`, which does not do what it looks like inside a
+     fixed-height scrolling box: multicol fragments content into further columns
+     to the side rather than down the page. The result at >=900px was
+     scrollWidth 4072 against clientWidth 840, scrollTop pinned at 0, and six of
+     the eight cards unreachable — with the column-spanning header left sitting
+     over the top, which is what made it look stuck while scrolling. */
   .help-body {
     grid-area: body;
     padding: 1.25rem 1.5rem;
-    columns: 2;
-    column-gap: 1rem;
   }
-  .help-section { break-inside: avoid; }
-  .help-section__head { column-span: all; }
 }
 
 @media (prefers-color-scheme: dark) {

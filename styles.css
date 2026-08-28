@@ -36,7 +36,11 @@ body {
   height: 100dvh;
   overscroll-behavior-y: contain; /* reduce pull-to-refresh on mobile */
 }
-header {
+/* Scoped to the app's own top bar rather than every <header> on the page.
+   As a bare type selector this also hit the <header> that titles each section
+   of the field guide, pinning it sticky at z-index 200 — so the section title
+   sat on top of the guide and appeared not to scroll. */
+body > header {
   padding: 0.75rem 1rem;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-strong) 100%);
   color: #fff;
