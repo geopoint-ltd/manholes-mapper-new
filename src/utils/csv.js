@@ -1,5 +1,5 @@
 // CSV utilities and exporters
-import { EDGE_ENGINEERING_STATUS, EDGE_LINE_DIAMETERS, EDGE_MATERIAL_OPTIONS, EDGE_TYPE_OPTIONS, NODE_ACCESS_OPTIONS, NODE_MAINTENANCE_OPTIONS, NODE_MATERIAL_OPTIONS, NODE_ACCURACY_OPTIONS } from '../state/constants.js';
+import { EDGE_ENGINEERING_STATUS, EDGE_FALL_TYPE_OPTIONS, EDGE_LINE_DIAMETERS, EDGE_MATERIAL_OPTIONS, EDGE_TYPE_OPTIONS, NODE_ACCESS_OPTIONS, NODE_MAINTENANCE_OPTIONS, NODE_MANHOLE_MATERIAL_OPTIONS, NODE_MATERIAL_OPTIONS, NODE_ACCURACY_OPTIONS } from '../state/constants.js';
 
 function normalizeOptions(list) {
   if (!Array.isArray(list)) return [];
@@ -18,12 +18,14 @@ function getOptionsFor(scope, key, adminConfig) {
   if (maybe.length) return maybe;
   if (scope === 'nodes') {
     if (key === 'material') return normalizeOptions(NODE_MATERIAL_OPTIONS);
+    if (key === 'manhole_material') return normalizeOptions(NODE_MANHOLE_MATERIAL_OPTIONS);
     if (key === 'access') return normalizeOptions(NODE_ACCESS_OPTIONS);
     if (key === 'maintenance_status') return normalizeOptions(NODE_MAINTENANCE_OPTIONS);
     if (key === 'accuracy_level') return normalizeOptions(NODE_ACCURACY_OPTIONS);
   } else {
     if (key === 'material') return normalizeOptions(EDGE_MATERIAL_OPTIONS);
     if (key === 'edge_type') return normalizeOptions(EDGE_TYPE_OPTIONS);
+    if (key === 'fall_type') return normalizeOptions(EDGE_FALL_TYPE_OPTIONS);
     if (key === 'line_diameter') return normalizeOptions(EDGE_LINE_DIAMETERS);
     if (key === 'engineering_status') return normalizeOptions(EDGE_ENGINEERING_STATUS);
   }
@@ -46,12 +48,14 @@ function codeFor(scope, key, value, adminConfig) {
     let defaults = [];
     if (scope === 'nodes') {
       if (key === 'material') defaults = normalizeOptions(NODE_MATERIAL_OPTIONS);
+      else if (key === 'manhole_material') defaults = normalizeOptions(NODE_MANHOLE_MATERIAL_OPTIONS);
       else if (key === 'access') defaults = normalizeOptions(NODE_ACCESS_OPTIONS);
       else if (key === 'maintenance_status') defaults = normalizeOptions(NODE_MAINTENANCE_OPTIONS);
       else if (key === 'accuracy_level') defaults = normalizeOptions(NODE_ACCURACY_OPTIONS);
     } else {
       if (key === 'material') defaults = normalizeOptions(EDGE_MATERIAL_OPTIONS);
       else if (key === 'edge_type') defaults = normalizeOptions(EDGE_TYPE_OPTIONS);
+      else if (key === 'fall_type') defaults = normalizeOptions(EDGE_FALL_TYPE_OPTIONS);
       else if (key === 'line_diameter') defaults = normalizeOptions(EDGE_LINE_DIAMETERS);
       else if (key === 'engineering_status') defaults = normalizeOptions(EDGE_ENGINEERING_STATUS);
     }
@@ -91,6 +95,7 @@ export function exportNodesCsv(nodes, adminConfig, t) {
     }
     if (include.note) row.push(csvQuote(n.note || ''));
     if (include.material) row.push(csvQuote(codeFor('nodes', 'material', n.material, adminConfig)));
+    if (include.manhole_material) row.push(csvQuote(codeFor('nodes', 'manhole_material', n.manholeMaterial, adminConfig)));
     if (include.cover_diameter) row.push(csvQuote(n.coverDiameter || ''));
     if (include.access) row.push(csvQuote(codeFor('nodes', 'access', n.access, adminConfig)));
     if (include.accuracy_level) row.push(csvQuote(codeFor('nodes', 'accuracy_level', n.accuracyLevel, adminConfig)));
@@ -103,6 +108,7 @@ export function exportNodesCsv(nodes, adminConfig, t) {
   if (include.type) headers.push('Type');
   if (include.note) headers.push('Note');
   if (include.material) headers.push('Cover material');
+  if (include.manhole_material) headers.push('ManholeMat');
   if (include.cover_diameter) headers.push('Cover diameter');
   if (include.access) headers.push('Access');
   if (include.accuracy_level) headers.push('Accuracy Level');
@@ -124,7 +130,7 @@ export function exportEdgesCsv(edges, adminConfig, t) {
     if (include.tail_measurement) row.push(csvQuote(e.tail_measurement || ''));
     if (include.head_measurement) row.push(csvQuote(e.head_measurement || ''));
     if (include.fall_depth) row.push(csvQuote(e.fall_depth || ''));
-    if (include.fall_position) row.push(csvQuote(codeFor('edges', 'fall_position', e.fall_position, adminConfig)));
+    if (include.fall_type) row.push(csvQuote(codeFor('edges', 'fall_type', e.fall_type, adminConfig)));
     if (include.line_diameter) row.push(csvQuote(codeFor('edges', 'line_diameter', e.line_diameter, adminConfig)));
     if (include.note) row.push(csvQuote(e.note || ''));
     if (include.edge_material) row.push(csvQuote(codeFor('edges', 'material', e.edge_material || e.material, adminConfig)));
@@ -138,7 +144,7 @@ export function exportEdgesCsv(edges, adminConfig, t) {
   if (include.tail_measurement) headers.push('Tail');
   if (include.head_measurement) headers.push('Head');
   if (include.fall_depth) headers.push('Fall depth');
-  if (include.fall_position) headers.push('Fall position');
+  if (include.fall_type) headers.push('FallType');
   if (include.line_diameter) headers.push('Diameter');
   if (include.note) headers.push('Note');
   if (include.edge_material) headers.push('Material');

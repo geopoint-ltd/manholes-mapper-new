@@ -117,6 +117,10 @@ export const NODE_MATERIAL_OPTIONS = [
   { code: 9, label: 'אבו' },
 ];
 
+// Shaft material (ManholeMat / חומר שוחה). Same Material domain as the cover
+// material, but a distinct field: one describes the chamber, the other the lid.
+export const NODE_MANHOLE_MATERIAL_OPTIONS = NODE_MATERIAL_OPTIONS.map((o) => ({ ...o }));
+
 export const NODE_COVER_DIAMETERS = ['לא ידוע', '35', '45', '55', '65'];
 
 export const NODE_ACCESS_OPTIONS = [
@@ -154,10 +158,13 @@ export const NODE_MAINTENANCE_OPTIONS = [
   { code: 14, label: 'אחר' },
 ];
 
-// Accuracy level for nodes (0 = Engineering, 1 = Schematic)
+// Accuracy level for nodes. Codes match the AccuracyLe domain in the
+// geodatabase (1/3/5), so an exported CSV drops straight in. Sketches captured
+// before this used 0/1 and are remapped on load — see utils/schema-migration.js.
 export const NODE_ACCURACY_OPTIONS = [
-  { code: 0, label: 'הנדסית' },
-  { code: 1, label: 'סכימטית' },
+  { code: 1, label: 'הנדסית' },
+  { code: 3, label: 'בינונית' },
+  { code: 5, label: 'סכימטית' },
 ];
 
 export const EDGE_MATERIAL_OPTIONS = [
@@ -175,6 +182,15 @@ export const EDGE_MATERIAL_OPTIONS = [
   { code: 12, label: 'פלסטיק - שוחת חופית' },
   { code: 13, label: 'שוחת PVC' },
   { code: 9, label: 'אבו' },
+];
+
+// Fall type (FallType / סוג מפל). Replaces the earlier fall_position field;
+// its two values map onto 2 (external) and 3 (internal) here.
+export const EDGE_FALL_TYPE_OPTIONS = [
+  { code: 0, label: 'לא ידוע' },
+  { code: 1, label: 'ירידה חופשית' },
+  { code: 2, label: 'מפל חיצוני' },
+  { code: 3, label: 'מפל פנימי' },
 ];
 
 export const EDGE_LINE_DIAMETERS = [
