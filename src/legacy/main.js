@@ -35,6 +35,7 @@ import { distanceToSegment } from '../utils/geometry.js';
 import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
 import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
+import { migrateGraph, SCHEMA_VERSION } from '../utils/schema-migration.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
 import { drawInfiniteGrid as drawInfiniteGridFeature, renderEdgeLegend as renderEdgeLegendFeature, drawEdge as drawEdgeFeature, drawNode as drawNodeFeature } from '../features/rendering.js';
@@ -182,6 +183,7 @@ let currentMode = 'node';
 let pendingEdgeTail = null;
 let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
+let schemaVersion = SCHEMA_VERSION; // stamped on save; older sketches migrate on load
 let currentSketchName = null; // human-friendly name for the sketch
 let autosaveEnabled = true;
 let currentLang = 'he';
@@ -250,6 +252,8 @@ import {
   EDGE_TYPE_SELECTED_COLORS,
   EDGE_ENGINEERING_STATUS,
   NODE_ACCURACY_OPTIONS,
+  NODE_MANHOLE_MATERIAL_OPTIONS,
+  EDGE_FALL_TYPE_OPTIONS,
 } from '../state/constants.js';
 const NODE_MATERIALS = NODE_MATERIAL_OPTIONS.map(o => o.label);
 const EDGE_MATERIALS = EDGE_MATERIAL_OPTIONS.map(o => o.label);
@@ -281,6 +285,7 @@ const defaultAdminConfig = {
       type: true,
       note: true,
       material: true,
+      manhole_material: true,
       cover_diameter: true,
       access: true,
       accuracy_level: true,
@@ -289,14 +294,16 @@ const defaultAdminConfig = {
     },
     defaults: {
       material: NODE_MATERIALS[0],
+      manhole_material: NODE_MATERIALS[0],
       cover_diameter: '',
       access: 0,
-      accuracy_level: 0,
+      accuracy_level: 1,
       engineering_status: 0,
       maintenance_status: 0,
     },
     options: {
       material: NODE_MATERIAL_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
+      manhole_material: NODE_MANHOLE_MATERIAL_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       access: NODE_ACCESS_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       accuracy_level: NODE_ACCURACY_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       // engineering_status removed for nodes
@@ -311,7 +318,7 @@ const defaultAdminConfig = {
       tail_measurement: true,
       head_measurement: true,
       fall_depth: true,
-      fall_position: true,
+      fall_type: true,
       line_diameter: true,
       note: true,
       edge_material: true,
@@ -324,7 +331,7 @@ const defaultAdminConfig = {
       tail_measurement: '',
       head_measurement: '',
       fall_depth: '',
-      fall_position: 0,
+      fall_type: 0,
       line_diameter: '',
       engineering_status: 0,
     },
@@ -333,10 +340,7 @@ const defaultAdminConfig = {
       edge_type: EDGE_TYPE_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       engineering_status: EDGE_ENGINEERING_STATUS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       line_diameter: EDGE_LINE_DIAMETERS.map(v => ({ code: v, label: v, enabled: true })),
-      fall_position: [
-        { code: 0, label: 'פנימי', enabled: true },
-        { code: 1, label: 'חיצוני', enabled: true },
-      ],
+      fall_type: EDGE_FALL_TYPE_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
     },
     // customFields removed
   }
@@ -394,6 +398,7 @@ function openAdminModal() {
   // Sections
   adminContent.appendChild(buildOptionsEditor(t('admin.tabNodes'), 'nodes', [
     { key: 'material', label: t('labels.coverMaterial'), type: 'select', optionsKey: 'material', valueKind: 'label' },
+    { key: 'manhole_material', label: t('labels.manholeMaterial'), type: 'select', optionsKey: 'manhole_material', valueKind: 'label' },
     { key: 'cover_diameter', label: t('labels.coverDiameter'), type: 'text' },
     { key: 'access', label: t('labels.access'), type: 'select', optionsKey: 'access', valueKind: 'code' },
     { key: 'accuracy_level', label: t('labels.accuracyLevel'), type: 'select', optionsKey: 'accuracy_level', valueKind: 'code' },
@@ -404,7 +409,7 @@ function openAdminModal() {
     { key: 'material', label: t('labels.edgeMaterial'), type: 'select', optionsKey: 'material', valueKind: 'label' },
     { key: 'edge_type', label: t('labels.edgeType'), type: 'select', optionsKey: 'edge_type', valueKind: 'label' },
     { key: 'line_diameter', label: t('labels.lineDiameter'), type: 'select', optionsKey: 'line_diameter', valueKind: 'label' },
-    { key: 'fall_position', label: t('labels.fallPosition'), type: 'select', optionsKey: 'fall_position', valueKind: 'code' },
+    { key: 'fall_type', label: t('labels.fallType'), type: 'select', optionsKey: 'fall_type', valueKind: 'code' },
     
   ]));
 
@@ -512,6 +517,7 @@ function openAdminScreen() {
   // Sections
   adminScreenContent.appendChild(buildOptionsEditor(t('admin.tabNodes'), 'nodes', [
     { key: 'material', label: 'חומר מכסה', type: 'select', optionsKey: 'material', valueKind: 'label' },
+    { key: 'manhole_material', label: 'חומר שוחה', type: 'select', optionsKey: 'manhole_material', valueKind: 'label' },
     { key: 'cover_diameter', label: 'קוטר מכסה', type: 'text' },
     { key: 'access', label: 'גישה', type: 'select', optionsKey: 'access', valueKind: 'code' },
     { key: 'accuracy_level', label: 'רמת דיוק', type: 'select', optionsKey: 'accuracy_level', valueKind: 'code' },
@@ -522,7 +528,7 @@ function openAdminScreen() {
     { key: 'edge_type', label: 'סוג קו', type: 'select', optionsKey: 'edge_type', valueKind: 'label' },
     { key: 'line_diameter', label: 'קוטר קו', type: 'select', optionsKey: 'line_diameter', valueKind: 'label' },
     { key: 'engineering_status', label: 'סטטוס הנדסי', type: 'select', optionsKey: 'engineering_status', valueKind: 'code' },
-    { key: 'fall_position', label: 'מפל פנימי/חיצוני', type: 'select', optionsKey: 'fall_position', valueKind: 'code' },
+    { key: 'fall_type', label: 'סוג מפל', type: 'select', optionsKey: 'fall_type', valueKind: 'code' },
   ]));
 
   // Initialize defaults
@@ -661,7 +667,7 @@ if (adminSaveBtn) adminSaveBtn.addEventListener('click', () => {
     const val = (el.tagName === 'SELECT') ? el.value : el.value;
     // Treat defaults for selects as label unless spec requested 'code'
     let stored = val;
-    const numericKeys = new Set(['access','accuracy_level','fall_position','engineering_status','maintenance_status']);
+    const numericKeys = new Set(['access','accuracy_level','fall_type','engineering_status','maintenance_status']);
     if (numericKeys.has(key)) {
       const num = Number(val);
       // Allow empty default (optional)
@@ -878,7 +884,7 @@ if (adminScreenSaveBtn) adminScreenSaveBtn.addEventListener('click', () => {
   adminScreenContent.querySelectorAll('[data-def]').forEach((el) => {
     const [scope, key] = el.getAttribute('data-def').split(':');
     let stored = (el.tagName === 'SELECT') ? el.value : el.value;
-    const numericKeys = new Set(['access','accuracy_level','fall_position','engineering_status','maintenance_status']);
+    const numericKeys = new Set(['access','accuracy_level','fall_type','engineering_status','maintenance_status']);
     if (numericKeys.has(key)) {
       const num = Number(stored);
       stored = (stored === '' ? '' : (Number.isFinite(num) ? num : 0));
@@ -1247,12 +1253,16 @@ function loadFromStorage() {
     if (!parsed || !parsed.nodes || !parsed.edges) return false;
     nodes = parsed.nodes;
     edges = parsed.edges;
+    // Must run before the back-compat defaults below: they would fill in
+    // fall_type and the migration would no longer see the legacy value.
+    schemaVersion = migrateGraph(nodes, edges, parsed.schemaVersion);
     creationDate = parsed.creationDate || null;
     currentSketchId = parsed.sketchId || null;
     currentSketchName = parsed.sketchName || null;
     // Ensure each node has required properties
     nodes.forEach((node) => {
       if (node.material === undefined) node.material = NODE_MATERIALS[0];
+      if (node.manholeMaterial === undefined) node.manholeMaterial = NODE_MATERIALS[0];
       if (node.type === undefined) node.type = NODE_TYPES[0];
       normalizeNodeType(node);
       // Normalize cover diameter to integer or empty
@@ -1266,7 +1276,7 @@ function loadFromStorage() {
         const acc = Number(node.access);
         node.access = Number.isFinite(acc) ? acc : 0;
       }
-      if (node.accuracyLevel === undefined) node.accuracyLevel = 0;
+      if (node.accuracyLevel === undefined) node.accuracyLevel = 1;
       if (typeof node.accuracyLevel !== 'number') {
         const acl = Number(node.accuracyLevel);
         node.accuracyLevel = Number.isFinite(acl) ? acl : 0;
@@ -1283,6 +1293,7 @@ function loadFromStorage() {
     edges.forEach((edge) => {
       if (edge.material === undefined) edge.material = EDGE_MATERIALS[0];
       if (edge.fall_depth === undefined) edge.fall_depth = '';
+      if (edge.fall_type === undefined) edge.fall_type = 0;
       if (edge.line_diameter === undefined) edge.line_diameter = '';
       if (edge.edge_type === undefined) edge.edge_type = EDGE_TYPES[0];
       if (edge.maintenanceStatus === undefined) edge.maintenanceStatus = 0;
@@ -1330,6 +1341,7 @@ function saveToStorage() {
     creationDate: creationDate,
     sketchId: currentSketchId,
     sketchName: currentSketchName,
+    schemaVersion,
   };
   localStorage.setItem('graphSketch', JSON.stringify(payload));
   // Persist to IndexedDB for durability
@@ -1396,6 +1408,7 @@ function saveToLibrary() {
     nextNodeId,
     creationDate: creationDate || nowIso,
     name: currentSketchName || null,
+    schemaVersion,
   };
   const idx = lib.findIndex((s) => s.id === record.id);
   if (idx >= 0) {
@@ -1421,9 +1434,12 @@ function loadFromLibrary(sketchId) {
   if (!rec) return false;
   nodes = rec.nodes || [];
   edges = rec.edges || [];
+  // Before the back-compat defaults below, for the same reason as above.
+  schemaVersion = migrateGraph(nodes, edges, rec.schemaVersion);
   // Backward compatibility for nodes
   nodes.forEach((node) => {
     if (node.material === undefined) node.material = NODE_MATERIALS[0];
+    if (node.manholeMaterial === undefined) node.manholeMaterial = NODE_MATERIALS[0];
     if (node.type === undefined) node.type = NODE_TYPES[0];
     normalizeNodeType(node);
     if (node.coverDiameter === undefined) node.coverDiameter = NODE_COVER_DIAMETERS[0];
@@ -1442,7 +1458,7 @@ function loadFromLibrary(sketchId) {
   // Backward compatibility: ensure new fields exist
   edges.forEach((edge) => {
     if (edge.fall_depth === undefined) edge.fall_depth = '';
-    if (edge.fall_position === undefined) edge.fall_position = '';
+    if (edge.fall_type === undefined) edge.fall_type = 0;
     if (edge.line_diameter === undefined) edge.line_diameter = '';
     if (edge.edge_type === undefined) edge.edge_type = EDGE_TYPES[0];
     if (edge.maintenanceStatus === undefined) edge.maintenanceStatus = 0;
@@ -1567,6 +1583,7 @@ function newSketch(date) {
   pendingEdgeTail = null;
   creationDate = date;
   currentSketchId = null; // new unsaved sketch
+  schemaVersion = SCHEMA_VERSION;
   currentSketchName = null;
   saveToStorage();
   draw();
@@ -1595,11 +1612,12 @@ function createNode(x, y) {
     y: y,
     note: '',
     material: (adminConfig.nodes?.defaults?.material ?? NODE_MATERIALS[0]),
+    manholeMaterial: (adminConfig.nodes?.defaults?.manhole_material ?? NODE_MATERIALS[0]),
     coverDiameter: (adminConfig.nodes?.defaults?.cover_diameter ?? ''),
     type: 'type1',
     nodeType: 'Manhole',
     access: (adminConfig.nodes?.defaults?.access ?? 0),
-    accuracyLevel: (adminConfig.nodes?.defaults?.accuracy_level ?? 0),
+    accuracyLevel: (adminConfig.nodes?.defaults?.accuracy_level ?? 1),
     nodeEngineeringStatus: (adminConfig.nodes?.defaults?.engineering_status ?? 0),
     maintenanceStatus: (adminConfig.nodes?.defaults?.maintenance_status ?? 0),
   };
@@ -1641,7 +1659,7 @@ function createEdge(tailId, headId) {
     tail_measurement: (adminConfig.edges?.defaults?.tail_measurement ?? ''),
     head_measurement: (adminConfig.edges?.defaults?.head_measurement ?? ''),
     fall_depth: (adminConfig.edges?.defaults?.fall_depth ?? ''),
-    fall_position: (adminConfig.edges?.defaults?.fall_position ?? ''),
+    fall_type: (adminConfig.edges?.defaults?.fall_type ?? 0),
     line_diameter: (adminConfig.edges?.defaults?.line_diameter ?? ''),
     edge_type: (adminConfig.edges?.defaults?.edge_type ?? EDGE_TYPES[0]),
     material: (adminConfig.edges?.defaults?.material ?? EDGE_MATERIALS[0]),
@@ -2093,6 +2111,87 @@ function buildNodeTypeSelectHtml(node) {
 }
 
 /**
+ * Options offered for FallType, in the order the surveyor picks them.
+ * 0 (לא ידוע) is the resting value and is never shown as a choice.
+ * @returns {Array<{code:number,label:string}>}
+ */
+function fallTypeChoices() {
+  const configured = adminConfig.edges?.options?.fall_type ?? EDGE_FALL_TYPE_OPTIONS;
+  const enabled = configured.filter((o) => o.enabled !== false && Number(o.code) !== 0);
+  // חיצוני first, then פנימי, then ירידה חופשית — the order asked for in the field.
+  const order = [2, 3, 1];
+  return enabled.slice().sort((a, b) => order.indexOf(Number(a.code)) - order.indexOf(Number(b.code)));
+}
+
+/**
+ * Radio group for FallType (סוג מפל).
+ *
+ * Only meaningful once a fall depth has been entered, so the inputs are
+ * disabled until then rather than hidden — a disabled control still tells the
+ * surveyor the question exists and what it will ask.
+ * @param {string} groupId unique per edge, so two rows never share a radio group
+ * @param {object} edge
+ * @returns {string} HTML
+ */
+function buildFallTypeHtml(groupId, edge) {
+  const hasDepth = edge.fall_depth !== '' && edge.fall_depth !== null && edge.fall_depth !== undefined;
+  const current = Number(edge.fall_type) || 0;
+  const radios = fallTypeChoices()
+    .map((o) => {
+      const id = `${groupId}_${o.code}`;
+      return `<label class="fall-type-option" for="${escapeHtml(id)}">
+          <input type="radio" id="${escapeHtml(id)}" name="${escapeHtml(groupId)}"
+                 value="${escapeHtml(o.code)}" ${current === Number(o.code) ? 'checked' : ''}
+                 ${hasDepth ? '' : 'disabled'} />
+          <span>${escapeHtml(o.label)}</span>
+        </label>`;
+    })
+    .join('');
+  return `<div class="field col-span-2 fall-type-field" data-fall-group="${escapeHtml(groupId)}">
+      <label>${t('labels.fallType')}</label>
+      <div class="fall-type-options ${hasDepth ? '' : 'is-disabled'}">${radios}</div>
+    </div>`;
+}
+
+/**
+ * Wire a FallType radio group and keep it in step with its depth input.
+ * @param {HTMLElement} container
+ * @param {string} groupId
+ * @param {HTMLInputElement|null} depthInput
+ * @param {object} edge
+ */
+function wireFallType(container, groupId, depthInput, edge) {
+  const wrap = container.querySelector(`[data-fall-group="${CSS.escape(groupId)}"]`);
+  if (!wrap) return;
+  const radios = Array.from(wrap.querySelectorAll('input[type="radio"]'));
+  radios.forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      edge.fall_type = Number(radio.value);
+      saveToStorage();
+      scheduleDraw();
+    });
+  });
+  const syncEnabled = () => {
+    const hasDepth = depthInput
+      ? String(depthInput.value || '').trim() !== ''
+      : edge.fall_depth !== '' && edge.fall_depth !== null && edge.fall_depth !== undefined;
+    radios.forEach((radio) => { radio.disabled = !hasDepth; });
+    wrap.querySelector('.fall-type-options').classList.toggle('is-disabled', !hasDepth);
+    if (!hasDepth) {
+      // Clearing the depth clears the type, so the two can never disagree.
+      radios.forEach((radio) => { radio.checked = false; });
+      if (Number(edge.fall_type) !== 0) {
+        edge.fall_type = 0;
+        debouncedSaveToStorage();
+      }
+    }
+  };
+  if (depthInput) depthInput.addEventListener('input', syncEnabled);
+  syncEnabled();
+}
+
+/**
  * Render the right-hand details panel based on the current selection.
  * Supports editing node id, note, material and edge type/material/measurements.
  */
@@ -2108,6 +2207,14 @@ function renderDetails() {
       .map(o => o.label || o);
     nodeMaterialOptionLabels.forEach((mat) => {
       materialOptions += `<option value="${escapeHtml(mat)}" ${node.material === mat ? 'selected' : ''}>${escapeHtml(mat)}</option>`;
+    });
+    // Shaft material (ManholeMat) — same domain, separate field from the cover
+    let manholeMaterialOptions = '';
+    const manholeMaterialLabels = (adminConfig.nodes?.options?.manhole_material ?? NODE_MANHOLE_MATERIAL_OPTIONS)
+      .filter(o => (o.enabled !== false))
+      .map(o => o.label || o);
+    manholeMaterialLabels.forEach((mat) => {
+      manholeMaterialOptions += `<option value="${escapeHtml(mat)}" ${node.manholeMaterial === mat ? 'selected' : ''}>${escapeHtml(mat)}</option>`;
     });
     // Cover diameter as free integer input
     // Access options
@@ -2155,6 +2262,11 @@ function renderDetails() {
               <label for="materialSelect">${t('labels.coverMaterial')}</label>
               <select id="materialSelect">${materialOptions}</select>
             </div>
+            ${adminConfig.nodes.include.manhole_material ? `
+            <div class="field">
+              <label for="manholeMaterialSelect">${t('labels.manholeMaterial')}</label>
+              <select id="manholeMaterialSelect">${manholeMaterialOptions}</select>
+            </div>` : ''}
             ${adminConfig.nodes.include.access ? `
             <div class="field">
               <label for="accessSelect">${t('labels.access')}</label>
@@ -2208,6 +2320,8 @@ function renderDetails() {
           const inputId = `edgeMeasure_${e.id}_${isTail ? 'tail' : 'head'}`;
           const matId = `edgeMaterial_${e.id}`;
           const diamSelectId = `edgeDiameterSelect_${e.id}`;
+          const fallDepthId = `edgeFallDepth_${e.id}`;
+          const fallTypeGroup = `edgeFallType_${e.id}`;
           const materialOptions = edgeMaterialOptionLabels.map((m) => `<option value="${escapeHtml(m)}" ${e.material === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
           const currentDiameterIndex = diameterIndexFromCode(e.line_diameter);
           html += `
@@ -2226,6 +2340,12 @@ function renderDetails() {
                 ${diameterOptions.map((d) => `<option value="${escapeHtml(d.code)}" ${String(e.line_diameter)===String(d.code)?'selected':''}>${escapeHtml(d.label)}</option>`).join('')}
               </select>
             </div>
+            ${adminConfig.edges.include.fall_depth ? `
+            <div class="field">
+              <label for="${fallDepthId}">${t('labels.fallDepth')}</label>
+              <input id="${fallDepthId}" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="${escapeHtml(e.fall_depth || '')}" placeholder="${t('labels.optional')}" dir="auto" />
+            </div>` : ''}
+            ${adminConfig.edges.include.fall_type ? buildFallTypeHtml(fallTypeGroup, e) : ''}
           `;
         });
         html += '</div></div>';
@@ -2239,9 +2359,23 @@ function renderDetails() {
           const inputId = `edgeMeasure_${e.id}_${isTail ? 'tail' : 'head'}`;
           const matId = `edgeMaterial_${e.id}`;
           const diamSelectId = `edgeDiameterSelect_${e.id}`;
+          const fallDepthId = `edgeFallDepth_${e.id}`;
+          const fallTypeGroup = `edgeFallType_${e.id}`;
           const measureInput = container.querySelector(`#${CSS.escape(inputId)}`);
           const materialSelect = container.querySelector(`#${CSS.escape(matId)}`);
           const diameterSelect = container.querySelector(`#${CSS.escape(diamSelectId)}`);
+          const fallDepthInputRow = container.querySelector(`#${CSS.escape(fallDepthId)}`);
+          if (fallDepthInputRow) {
+            fallDepthInputRow.addEventListener('input', (ev) => {
+              const raw = String(ev.target.value || '');
+              const sanitized = sanitizeMeasurement(raw);
+              if (sanitized !== raw) ev.target.value = sanitized;
+              e.fall_depth = sanitized;
+              debouncedSaveToStorage();
+              scheduleDraw();
+            });
+          }
+          wireFallType(container, fallTypeGroup, fallDepthInputRow, e);
 
           if (measureInput) {
             const setHighlight = () => { highlightedHalfEdge = { edgeId: e.id, half: isTail ? 'tail' : 'head' }; scheduleDraw(); };
@@ -2354,6 +2488,15 @@ function renderDetails() {
     if (materialSelect) {
       materialSelect.addEventListener('change', (e) => {
         node.material = e.target.value;
+        saveToStorage();
+        scheduleDraw();
+      });
+    }
+    // Shaft material listener
+    const manholeMaterialSelect = container.querySelector('#manholeMaterialSelect');
+    if (manholeMaterialSelect) {
+      manholeMaterialSelect.addEventListener('change', (e) => {
+        node.manholeMaterial = e.target.value;
         saveToStorage();
         scheduleDraw();
       });
@@ -2512,7 +2655,7 @@ function renderDetails() {
         </div>
       </div>
 
-      ${(adminConfig.edges.include.fall_depth || adminConfig.edges.include.fall_position) ? `
+      ${(adminConfig.edges.include.fall_depth || adminConfig.edges.include.fall_type) ? `
       <div class="details-section">
         <div class="details-grid two-col">
           ${adminConfig.edges.include.fall_depth ? `
@@ -2520,17 +2663,7 @@ function renderDetails() {
             <label for="fallDepthInput">${t('labels.fallDepth')}</label>
             <input id="fallDepthInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(edge.fall_depth || '')}" placeholder="${t('labels.optional')}" dir="auto" />
           </div>` : ''}
-          ${adminConfig.edges.include.fall_position ? `
-          <div class="field">
-            <label for="fallPositionSelect">${t('labels.fallPosition')}</label>
-            <select id="fallPositionSelect">
-              <option value="" ${edge.fall_position===''?'selected':''}>${t('labels.optional')}</option>
-              ${(adminConfig.edges?.options?.fall_position || [{code:0,label:'פנימי'},{code:1,label:'חיצוני'}])
-                .filter(o => (o.enabled !== false))
-                .map(({code,label}) => `<option value="${escapeHtml(code)}" ${Number(edge.fall_position)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
-                .join('')}
-            </select>
-          </div>` : ''}
+          ${adminConfig.edges.include.fall_type ? buildFallTypeHtml('edgeFallType', edge) : ''}
         </div>
       </div>` : ''}
 
@@ -2568,7 +2701,7 @@ function renderDetails() {
     const edgeMaterialSelect = container.querySelector('#edgeMaterialSelect');
     const edgeDiameterSelect = container.querySelector('#edgeDiameterSelect');
     const edgeEngineeringStatusSelect = container.querySelector('#edgeEngineeringStatusSelect');
-    const fallPositionSelect = container.querySelector('#fallPositionSelect');
+
     edgeTypeSelect.addEventListener('change', (e) => {
       edge.edge_type = e.target.value;
       saveToStorage();
@@ -2592,14 +2725,6 @@ function renderDetails() {
         edge.engineeringStatus = Number.isFinite(num) ? num : 0;
         saveToStorage();
         scheduleDraw();
-      });
-    }
-    if (fallPositionSelect) {
-      fallPositionSelect.addEventListener('change', (e) => {
-        const raw = e.target.value;
-        const num = Number(raw);
-        edge.fall_position = raw === '' || !Number.isFinite(num) ? '' : num;
-        saveToStorage();
       });
     }
     const tailInput = container.querySelector('#tailInput');
@@ -2634,6 +2759,7 @@ function renderDetails() {
         scheduleDraw();
       });
     }
+    wireFallType(container, 'edgeFallType', fallDepthInput, edge);
     if (fallDepthInput) {
       fallDepthInput.addEventListener('input', (e) => {
       // Store the value, allowing partial decimals like "3." while typing
@@ -3485,6 +3611,7 @@ if (importSketchBtn && importSketchFile) {
       // Load the imported sketch
       nodes = importedSketch.nodes;
       edges = importedSketch.edges;
+      schemaVersion = migrateGraph(nodes, edges, importedSketch.schemaVersion);
       nextNodeId = importedSketch.nextNodeId;
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
