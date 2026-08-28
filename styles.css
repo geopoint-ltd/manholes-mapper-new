@@ -386,36 +386,6 @@ header select.btn {
 }
 header select.btn option { color: #0f172a; }
 
-/* Button-like autosave control in header, toggle remains for state */
-.autosave-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem; /* match .btn spacing */
-  cursor: pointer;
-  height: 36px; /* match header buttons */
-  padding: 0 0.9rem; /* vertical padding handled by fixed height */
-  border-radius: 999px; /* pill like other header buttons */
-  line-height: 1; /* avoid extra vertical room */
-  box-sizing: border-box;
-}
-.autosave-btn input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  border: 2px solid currentColor;
-  position: relative;
-  margin: 0; /* remove default margins that increase height */
-}
-.autosave-btn input[type="checkbox"]:checked::after {
-  content: "check";
-  font-family: 'Material Icons';
-  font-size: 16px;
-  position: absolute;
-  left: -2px;
-  top: -2px;
-}
 .btn-danger {
   background: #ef4444; /* red-500 */
   color: #fff;
@@ -2363,16 +2333,6 @@ input.floating-keyboard-active {
   #mobileMenu .btn:last-child { margin-bottom: 0; }
   #mobileMenu select { min-height: 44px; }
   #mobileMenu .search-input { min-height: 44px; font-size: 16px; }
-  /* the autosave checkbox was a 13px target; grow it and its whole row */
-  #mobileMenu label {
-    min-height: 44px;
-    margin-bottom: 0.35rem;
-  }
-  #mobileMenu input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    flex: 0 0 auto;
-  }
 }
 
 /* --- details drawer: usable form area on a phone -------------------------

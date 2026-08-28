@@ -67,7 +67,6 @@ const dateInput = document.getElementById('dateInput');
 const startBtn = document.getElementById('startBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const helpBtn = document.getElementById('helpBtn');
-const autosaveToggle = document.getElementById('autosaveToggle');
 const saveBtn = document.getElementById('saveBtn');
 const editModeBtn = null; // Removed edit button; edit functionality handled contextually
 const helpModal = document.getElementById('helpModal');
@@ -126,8 +125,6 @@ const mobileExportEdgesBtn = document.getElementById('mobileExportEdgesBtn');
 const mobileExportSketchBtn = document.getElementById('mobileExportSketchBtn');
 const mobileImportSketchBtn = document.getElementById('mobileImportSketchBtn');
 const mobileSaveBtn = document.getElementById('mobileSaveBtn');
-const mobileAutosaveToggle = document.getElementById('mobileAutosaveToggle');
-const mobileAutosaveLabel = document.getElementById('mobileAutosaveLabel');
 const mobileLangSelect = document.getElementById('mobileLangSelect');
 const mobileHelpBtn = document.getElementById('mobileHelpBtn');
 
@@ -167,7 +164,6 @@ function synthesizeClickOnTap(element) {
   adminBtn,
   homeBtn,
   langSelect,
-  autosaveToggle,
   mobileMenuBtn
 ].forEach(synthesizeClickOnTap);
 
@@ -190,7 +186,11 @@ let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
 let schemaVersion = SCHEMA_VERSION; // stamped on save; older sketches migrate on load
 let currentSketchName = null; // human-friendly name for the sketch
-let autosaveEnabled = true;
+// Every change is written to the library as well as to localStorage. This used
+// to be a toggle, and a device left in manual mode kept its library copy stale:
+// a reload dropped the surveyor on the sketch list, and opening the sketch from
+// there restored the older copy over their newer work. Saving is not a
+// preference worth offering when losing a day of survey is the downside.
 let currentLang = 'he';
 // Pointer position used for edge preview in edge mode
 let pendingEdgePreview = null; // { x, y } or null
@@ -1062,10 +1062,6 @@ function applyLangToStaticUI() {
   if (exportEdgesBtn) { exportEdgesBtn.title = t('exportEdges'); }
   setBtnLabel(saveBtn, t('save'));
   if (saveBtn) saveBtn.title = t('save');
-  if (autosaveToggle) {
-    const autosaveLabelEl = autosaveToggle.parentElement && autosaveToggle.parentElement.querySelector('.label');
-    if (autosaveLabelEl) autosaveLabelEl.textContent = t('autosave');
-  }
   if (helpBtn) { helpBtn.title = t('help'); setBtnLabel(helpBtn, t('help')); }
   if (adminBtn) { adminBtn.title = t('admin.manage'); }
   if (recenterBtn) { 
@@ -1162,10 +1158,6 @@ function applyLangToStaticUI() {
     const lbl = mobileAdminBtn.querySelector('.label');
     if (lbl) lbl.textContent = t('admin.manage');
     mobileAdminBtn.title = t('admin.manage');
-  }
-  if (mobileAutosaveToggle) {
-    const lbl = mobileAutosaveLabel && mobileAutosaveLabel.querySelector('.label');
-    if (lbl) lbl.textContent = t('autosave');
   }
   // Update edge legend alignment per language
   renderEdgeLegend();
@@ -1383,9 +1375,7 @@ function saveToStorage() {
   localStorage.setItem('graphSketch', JSON.stringify(payload));
   // Persist to IndexedDB for durability
   idbSaveCurrentCompat(payload);
-  if (autosaveEnabled) {
-    saveToLibrary();
-  }
+  saveToLibrary();
 }
 
 // Debounced saver to reduce jank on mobile while typing
@@ -1536,33 +1526,64 @@ function deleteFromLibrary(sketchId) {
   idbDeleteRecordCompat(sketchId);
 }
 
-function migrateSingleSketchToLibraryIfNeeded() {
-  const lib = getLibrary();
-  if (lib.length > 0) return; // already migrated or has sketches
+/**
+ * Make sure the sketch in `graphSketch` also exists in the library, and is the
+ * version the library holds.
+ *
+ * Startup shows the library list whenever it has anything in it, and never
+ * reopens `graphSketch` on its own. So a sketch that is only in `graphSketch` —
+ * or is newer there than in the library — has no route back: the list either
+ * does not show it, or shows an older copy that overwrites the newer one when
+ * opened. `graphSketch` is written on every change, so it is never behind; it
+ * is the copy worth trusting here.
+ *
+ * This used to run only when the library was empty, which left exactly that gap
+ * on any device whose library was not empty.
+ */
+function ensureCurrentSketchInLibrary() {
   try {
     const raw = localStorage.getItem('graphSketch');
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.nodes || !parsed.edges) return;
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return;
+    // An empty sketch is not worth a library entry of its own.
+    if (!parsed.nodes.length && !parsed.edges.length) return;
+
+    const lib = getLibrary();
     const id = parsed.sketchId || generateSketchId();
+    const idx = lib.findIndex((r) => r && r.id === id);
+    const existing = idx >= 0 ? lib[idx] : null;
     const nowIso = new Date().toISOString();
     const record = {
       id,
-      createdAt: parsed.creationDate || nowIso,
+      createdAt: (existing && existing.createdAt) || parsed.creationDate || nowIso,
       updatedAt: nowIso,
       nodes: parsed.nodes,
       edges: parsed.edges,
       nextNodeId: parsed.nextNodeId || 1,
-      creationDate: parsed.creationDate || nowIso,
-      name: parsed.sketchName || null,
+      creationDate: parsed.creationDate || (existing && existing.creationDate) || nowIso,
+      // Don't drop a name the library already knows just because this copy lacks one.
+      name: parsed.sketchName || (existing && existing.name) || null,
+      schemaVersion: parsed.schemaVersion,
     };
-    setLibrary([record]);
+    // Replace this one entry. Rewriting the whole array would delete every
+    // other sketch on the device.
+    if (idx >= 0) lib[idx] = record;
+    else lib.unshift(record);
+    setLibrary(lib);
     currentSketchId = id;
-    saveToStorage();
-    // Also populate IndexedDB with the migrated record
+
+    // Stamp the id back so the next launch updates this record instead of
+    // adding another one. Re-serialising `parsed` keeps the nodes and edges
+    // intact — writing via saveToStorage() here would persist the in-memory
+    // graph, which is still empty this early in startup.
+    if (!parsed.sketchId) {
+      parsed.sketchId = id;
+      localStorage.setItem('graphSketch', JSON.stringify(parsed));
+    }
     idbSaveRecordCompat(record);
   } catch (e) {
-    console.warn('Migration skipped', e);
+    console.warn('Could not mirror the current sketch into the library', e);
   }
 }
 
@@ -3818,26 +3839,12 @@ if (sketchListEl) {
   });
 }
 
-// Save button and autosave toggle
+// Save button. Saving happens on every change anyway; this stays because a
+// surveyor finishing a manhole wants to see something say so.
 if (saveBtn) {
   saveBtn.addEventListener('click', () => {
-    const before = autosaveEnabled;
-    autosaveEnabled = false; // avoid double-save side effects
-    saveToLibrary();
-    autosaveEnabled = before;
     saveToStorage();
     showToast(t('toasts.saved'));
-  });
-}
-if (autosaveToggle) {
-  const savedPref = localStorage.getItem('graphSketch.autosave');
-  if (savedPref !== null) autosaveEnabled = savedPref === 'true';
-  autosaveToggle.checked = autosaveEnabled;
-  autosaveToggle.addEventListener('change', () => {
-    autosaveEnabled = !!autosaveToggle.checked;
-    localStorage.setItem('graphSketch.autosave', String(autosaveEnabled));
-    showToast(autosaveEnabled ? t('toasts.autosaveOn') : t('toasts.autosaveOff'));
-    if (autosaveEnabled) saveToLibrary();
   });
 }
 
@@ -4008,22 +4015,6 @@ if (mobileSaveBtn && saveBtn) {
   mobileSaveBtn.addEventListener('click', () => {
     closeMobileMenu();
     saveBtn.click();
-  });
-}
-// Autosave toggle: keep both toggles in sync and dispatch change on original toggle
-if (mobileAutosaveToggle && autosaveToggle) {
-  // Initialize mobile toggle to match saved preference
-  mobileAutosaveToggle.checked = autosaveToggle.checked;
-  // When mobile toggle changes, propagate to desktop toggle
-  mobileAutosaveToggle.addEventListener('change', () => {
-    autosaveToggle.checked = mobileAutosaveToggle.checked;
-    // Trigger change event on desktop toggle
-    autosaveToggle.dispatchEvent(new Event('change'));
-    closeMobileMenu();
-  });
-  // When desktop toggle changes (e.g. via settings), update mobile toggle
-  autosaveToggle.addEventListener('change', () => {
-    mobileAutosaveToggle.checked = autosaveToggle.checked;
   });
 }
 // Language selector sync
@@ -4343,7 +4334,7 @@ async function init() {
   try { await restoreFromIndexedDbIfNeeded(); } catch (_) {}
   // Set default date input to today
   dateInput.value = new Date().toISOString().substr(0, 10);
-  migrateSingleSketchToLibraryIfNeeded();
+  ensureCurrentSketchInLibrary();
   // Language init
   const savedLang = localStorage.getItem('graphSketch.lang');
   if (savedLang === 'en' || savedLang === 'he') currentLang = savedLang; else currentLang = 'he';
