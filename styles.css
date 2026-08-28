@@ -1192,7 +1192,10 @@ input.floating-keyboard-active {
 
 /* Label input fills its cell to maximize space for long labels */
 .option-table .opt-label input[type="text"] {
-  width: 150px;
+  /* was a fixed 150px, which truncated every Hebrew value; the column is
+     width:auto, so filling it is what actually maximises the space */
+  width: 100%;
+  min-width: 8rem;
   box-sizing: border-box;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
@@ -1468,7 +1471,12 @@ input.floating-keyboard-active {
 
   .option-table {
     font-size: 0.85rem;
-    min-width: 500px; /* Prevent excessive compression */
+  }
+  /* Keeps the columns readable while it is still a table. Below 480px the rows
+     become stacked cards that need no width at all, and a min-width there just
+     pushed them off the side of the screen. */
+  @media (min-width: 481px) {
+    .option-table { min-width: 500px; }
   }
 
   .option-table th,
@@ -2438,12 +2446,18 @@ input.floating-keyboard-active {
     z-index: 2;
     background: var(--color-surface);
   }
+  /* Only meaningful while the table is still a table. Below 480px it becomes
+     a stack of cards (see the max-width:480px block), and forcing a 30rem
+     min-width there squashed every cell and pushed the delete button off the
+     side. Scoped so the two layouts stop fighting. */
   .option-table-wrapper {
-    overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
   }
-  .option-table { min-width: 30rem; }
+  @media (min-width: 481px) {
+    .option-table-wrapper { overflow-x: auto; }
+    .option-table { min-width: 30rem; }
+  }
   /* every control in settings reachable with a thumb */
   .admin-section button,
   .admin-group-toggle {
@@ -2594,7 +2608,10 @@ input.floating-keyboard-active {
   }
 }
 
-@media (min-width: 1400px) {
+/* A third column leaves each options table about 380px wide, which is not
+   enough for the longer material names once the fixed columns take their
+   share. Only split three ways when there is genuinely room. */
+@media (min-width: 1700px) {
   #adminScreen .admin-section,
   #adminModal .admin-section { columns: 3; }
 }
@@ -2617,4 +2634,117 @@ input.floating-keyboard-active {
 /* help guide: the section chips deserve a full touch target */
 @media (max-width: 900px) {
   .help-tab { min-height: 44px; }
+}
+
+/* ==========================================================================
+   Corrections, 2026-08-28
+   ========================================================================== */
+
+/* --- settings option rows on a phone -------------------------------------
+   Below 480px each row becomes a card with its column name printed above the
+   value. The generic table styling added earlier (cell padding, top borders,
+   a shared min-height on every button) worked against that: labels lost their
+   spacing and the delete button stretched to the full width of the card.
+   Restate the card layout so it wins, and give it a proper shape. */
+@media (max-width: 480px) {
+  #adminScreen .option-table td,
+  #adminModal .option-table td {
+    display: block;
+    padding: 0.35rem 0;
+    border-top: none;
+  }
+
+  #adminScreen .option-table tr,
+  #adminModal .option-table tr {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 0.85rem;
+    margin-bottom: 0.6rem;
+  }
+
+  /* the column name above each value */
+  #adminScreen .option-table td::before,
+  #adminModal .option-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-weight: 600;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    margin-bottom: 0.3rem;
+  }
+
+  /* "enabled" reads better as a checkbox beside its label than stacked */
+  #adminScreen .option-table .opt-enabled,
+  #adminModal .option-table .opt-enabled {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #adminScreen .option-table .opt-enabled::before,
+  #adminModal .option-table .opt-enabled::before {
+    margin-bottom: 0;
+    order: 2;
+  }
+
+  /* delete is one action on one row — not a full-width banner */
+  #adminScreen .option-table .opt-actions,
+  #adminModal .option-table .opt-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+  }
+  #adminScreen .option-table .opt-actions::before,
+  #adminModal .option-table .opt-actions::before {
+    display: none;
+  }
+  #adminScreen .option-table .opt-actions button,
+  #adminModal .option-table .opt-actions button {
+    width: auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 1rem;
+    border-radius: 10px;
+  }
+
+  #adminScreen .option-table .opt-label input[type="text"],
+  #adminModal .option-table .opt-label input[type="text"],
+  #adminScreen .option-table .opt-code input[type="text"],
+  #adminModal .option-table .opt-code input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
+/* --- field guide: keep selected text legible rather than grey-on-blue -----
+   (the section-intro contrast itself is fixed in src/help/help.css, which
+   loads after this file and would otherwise win) */
+.help-screen ::selection {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* The checkbox, code and delete columns were sized for a full-width table
+   (80/100/100px). Inside a multi-column settings layout that starves the label
+   column, which is the only one holding text worth reading. Give them what
+   they actually need and let the label take the rest. */
+#adminScreen .option-table .opt-enabled,
+#adminModal .option-table .opt-enabled { width: 52px; }
+
+#adminScreen .option-table .opt-code,
+#adminModal .option-table .opt-code { width: 68px; }
+
+#adminScreen .option-table .opt-actions,
+#adminModal .option-table .opt-actions { width: 56px; }
+
+#adminScreen .option-table .opt-code input[type="text"],
+#adminModal .option-table .opt-code input[type="text"] { width: 100%; }
+
+#adminScreen .option-table .opt-actions .btn-sm,
+#adminModal .option-table .opt-actions .btn-sm {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
 }
