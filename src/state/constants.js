@@ -29,8 +29,6 @@ const COLORS_LIGHT = {
     typePrimary: '#2563eb',   // blue-600 (קו ראשי)
     typeSecondary: '#0d9488', // teal-600 (קו משני)
     selected: '#7c3aed',      // violet-600
-    selectedPrimary: '#60a5fa', // blue-400 (selected primary)
-    selectedSecondary: '#5eead4', // teal-300 (selected secondary — same hue as the type)
     preview: '#94a3b8',       // slate-400
     label: '#334155',         // slate-700 (dark text for light mode)
     labelStroke: '#ffffff',   // white stroke for light mode
@@ -65,8 +63,6 @@ const COLORS_DARK = {
     typePrimary: '#60a5fa',   // blue-400 (קו ראשי — lighter for dark mode)
     typeSecondary: '#2dd4bf', // teal-400 (קו משני — lighter for dark mode)
     selected: '#a78bfa',      // violet-400 (lighter for dark mode)
-    selectedPrimary: '#93c5fd', // blue-300 (selected primary for dark mode)
-    selectedSecondary: '#99f6e4', // teal-200 (selected secondary for dark mode)
     preview: '#94a3b8',       // slate-400
     label: '#f1f5f9',         // slate-100 (light text for dark mode)
     labelStroke: '#1e293b',   // slate-800 (dark stroke for dark mode)
@@ -182,11 +178,14 @@ export const EDGE_MATERIAL_OPTIONS = [
 
 // Fall type (FallType / סוג מפל). Replaces the earlier fall_position field;
 // its two values map onto 2 (external) and 3 (internal) here.
+// Labels drop the word מפל: the field is already titled "סוג מפל", so repeating
+// it in every option only made the chips wide enough to wrap on a phone. The
+// codes are what the CSV carries, so this is presentation only.
 export const EDGE_FALL_TYPE_OPTIONS = [
   { code: 0, label: 'לא ידוע' },
   { code: 1, label: 'ירידה חופשית' },
-  { code: 2, label: 'מפל חיצוני' },
-  { code: 3, label: 'מפל פנימי' },
+  { code: 2, label: 'חיצוני' },
+  { code: 3, label: 'פנימי' },
 ];
 
 export const EDGE_LINE_DIAMETERS = [
@@ -247,12 +246,6 @@ function themeAwareColorMap(colorKeyByLabel) {
 export const EDGE_TYPE_COLORS = themeAwareColorMap({
   'קו ראשי': 'typePrimary',
   'קו משני': 'typeSecondary',
-});
-
-// Colors used when an edge is selected: slightly lighter variant per edge type
-export const EDGE_TYPE_SELECTED_COLORS = themeAwareColorMap({
-  'קו ראשי': 'selectedPrimary',
-  'קו משני': 'selectedSecondary',
 });
 
 export const EDGE_ENGINEERING_STATUS = [

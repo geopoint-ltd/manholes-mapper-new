@@ -65,14 +65,32 @@ export function drawInfiniteGrid(ctx, viewTranslate, viewScale, canvas) {
  */
 export function drawEdge(ctx, edge, tailNode, headNode, options) {
   if (!tailNode || !headNode) return;
-  const { color, selectedColor, edgeTypeColors, highlightedHalfEdge, colors } = options;
+  const { color, edgeTypeColors, highlightedHalfEdge, colors } = options;
   const x1 = tailNode.x, y1 = tailNode.y, x2 = headNode.x, y2 = headNode.y;
+  const isSelected = edge === options.selectedEdge;
   ctx.save();
-  const resolvedColor = color || (edge === options.selectedEdge
-    ? (selectedColor || (colors?.edge?.selected || '#7c3aed'))
-    : (edgeTypeColors?.[edge.edge_type] || '#555'));
+  // The line keeps its type colour even while selected. Selection used to
+  // repaint it violet, which told the surveyor which pipe they were editing but
+  // took away which type it was — exactly when they are there to change it.
+  const resolvedColor = color || (edgeTypeColors?.[edge.edge_type] || '#555');
+
+  // Selection reads as a halo underneath instead: unmistakable at arm's length
+  // in the sun, and it leaves the colour underneath alone.
+  if (isSelected) {
+    ctx.save();
+    ctx.strokeStyle = colors?.edge?.selected || '#7c3aed';
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.strokeStyle = resolvedColor;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = isSelected ? 3.5 : 2;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);

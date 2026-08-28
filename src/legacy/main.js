@@ -254,7 +254,6 @@ import {
   EDGE_TYPES,
   EDGE_TYPE_OPTIONS,
   EDGE_TYPE_COLORS,
-  EDGE_TYPE_SELECTED_COLORS,
   EDGE_ENGINEERING_STATUS,
   NODE_ACCURACY_OPTIONS,
   NODE_MANHOLE_MATERIAL_OPTIONS,
@@ -352,21 +351,24 @@ const defaultAdminConfig = {
 };
 
 /**
- * Force the line-type list back to the built-in one.
+ * Force the option lists the code owns back to their built-in values.
  *
  * The stored settings blob replaces `edges` wholesale, so a device that saved
- * settings under an older build still carries the three-entry list — including
- * קו סניקה, and the codes 4802/4803 the wrong way round. Those codes are the
- * geodatabase domain LineSubType_1, not a preference, so a stale saved copy
- * would quietly export pipes under the wrong subtype. This list is owned by the
- * code; anything a device saved for it is discarded.
+ * settings under an older build still carries that build's lists.
+ *
+ * For edge_type that is a correctness problem: the codes are the geodatabase
+ * domain LineSubType_1, not a preference, and the stale copy has 4802/4803 the
+ * wrong way round plus the retired קו סניקה — it would quietly export pipes
+ * under the wrong subtype. For fall_type it is a cosmetic one: the stale copy
+ * still spells the options "מפל חיצוני"/"מפל פנימי". Either way the device's
+ * saved copy of these two lists is discarded.
  */
-function normalizeEdgeTypeConfig(cfg) {
+function normalizeCodeOwnedOptions(cfg) {
   if (!cfg || !cfg.edges) return;
   cfg.edges.options = cfg.edges.options || {};
-  cfg.edges.options.edge_type = EDGE_TYPE_OPTIONS.map(
-    (o) => ({ code: o.code, label: o.label, enabled: true })
-  );
+  const own = (list) => list.map((o) => ({ code: o.code, label: o.label, enabled: true }));
+  cfg.edges.options.edge_type = own(EDGE_TYPE_OPTIONS);
+  cfg.edges.options.fall_type = own(EDGE_FALL_TYPE_OPTIONS);
   cfg.edges.defaults = cfg.edges.defaults || {};
   if (!EDGE_TYPES.includes(cfg.edges.defaults.edge_type)) {
     cfg.edges.defaults.edge_type = EDGE_TYPES[0];
@@ -391,7 +393,7 @@ let adminConfig = (() => {
     merged.edges.defaults = merged.edges.defaults || {};
     // Undo labels that an earlier settings save truncated at an embedded quote
     repairTruncatedAdminLabels(merged);
-    normalizeEdgeTypeConfig(merged);
+    normalizeCodeOwnedOptions(merged);
     return merged;
   } catch (e) {
     console.warn('Failed to load admin config; using defaults', e);
@@ -2256,6 +2258,56 @@ function fallTypeChoices() {
  * @param {object} edge
  * @returns {string} HTML
  */
+/** The line types on offer, as labels. */
+function edgeTypeChoices() {
+  return (adminConfig.edges?.options?.edge_type ?? EDGE_TYPE_OPTIONS)
+    .filter((o) => o.enabled !== false)
+    .map((o) => o.label || o);
+}
+
+/**
+ * Line type as radio buttons rather than a dropdown.
+ *
+ * There are only two, and a dropdown hides the one you did not pick behind a
+ * tap — on a phone, in the sun, that is how a קו משני gets left as קו ראשי.
+ * Both are visible at once, each next to the colour it will draw in.
+ */
+function buildEdgeTypeHtml(groupId, edge) {
+  const current = edge.edge_type || EDGE_TYPES[0];
+  const radios = edgeTypeChoices()
+    .map((label, i) => {
+      const id = `${groupId}_${i}`;
+      return `<label class="edge-type-option" for="${escapeHtml(id)}">
+          <input type="radio" id="${escapeHtml(id)}" name="${escapeHtml(groupId)}"
+                 value="${escapeHtml(label)}" ${current === label ? 'checked' : ''} />
+          <span class="edge-type-swatch" style="background:${escapeHtml(EDGE_TYPE_COLORS[label] || '#555')}"></span>
+          <span>${escapeHtml(label)}</span>
+        </label>`;
+    })
+    .join('');
+  return `<div class="field col-span-2 edge-type-field" data-edge-type-group="${escapeHtml(groupId)}">
+      <label>${t('labels.edgeType')}</label>
+      <div class="edge-type-options">${radios}</div>
+    </div>`;
+}
+
+/**
+ * Wire a line-type radio group. Redraws so the line changes colour under the
+ * surveyor's finger as they pick.
+ */
+function wireEdgeType(container, groupId, edge) {
+  const wrap = container.querySelector(`[data-edge-type-group="${CSS.escape(groupId)}"]`);
+  if (!wrap) return;
+  wrap.querySelectorAll('input[type="radio"]').forEach((input) => {
+    input.addEventListener('change', (e) => {
+      if (!e.target.checked) return;
+      edge.edge_type = e.target.value;
+      saveToStorage();
+      scheduleDraw();
+    });
+  });
+}
+
 function buildFallTypeHtml(groupId, edge) {
   const hasDepth = edge.fall_depth !== '' && edge.fall_depth !== null && edge.fall_depth !== undefined;
   const current = Number(edge.fall_type) || 0;
@@ -2720,14 +2772,6 @@ function renderDetails() {
       const idx = (adminConfig.edges?.options?.material ? list.map(o=>o.label) : EDGE_MATERIALS).indexOf(label);
       return idx >= 0 ? idx : 0;
     };
-    // Build dropdown options for edge type
-    let edgeTypeOptions = '';
-    const edgeTypeOptionLabels = (adminConfig.edges?.options?.edge_type ?? EDGE_TYPE_OPTIONS)
-      .filter(o => (o.enabled !== false))
-      .map(o => o.label || o);
-    edgeTypeOptionLabels.forEach((et) => {
-      edgeTypeOptions += `<option value="${escapeHtml(et)}" ${edge.edge_type === et ? 'selected' : ''}>${escapeHtml(et)}</option>`;
-    });
     // Engineering status options for edge
     const edgeEngineeringOptions = (adminConfig.edges?.options?.engineering_status ?? EDGE_ENGINEERING_STATUS)
       .map(({ code, label }) => `<option value="${escapeHtml(code)}" ${Number(edge.engineeringStatus)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
@@ -2754,10 +2798,7 @@ function renderDetails() {
 
       <div class="details-section">
         <div class="details-grid two-col">
-          <div class="field">
-            <label for="edgeTypeSelect">${t('labels.edgeType')}</label>
-            <select id="edgeTypeSelect">${edgeTypeOptions}</select>
-          </div>
+          ${buildEdgeTypeHtml('edgeType', edge)}
           ${adminConfig.edges.include.engineering_status ? `
           <div class="field">
             <label for="edgeEngineeringStatusSelect">${t('labels.engineeringStatus')}</label>
@@ -2828,16 +2869,11 @@ function renderDetails() {
     `;
     detailsContainer.appendChild(container);
     // Attach listeners
-    const edgeTypeSelect = container.querySelector('#edgeTypeSelect');
     const edgeMaterialSelect = container.querySelector('#edgeMaterialSelect');
     const edgeDiameterSelect = container.querySelector('#edgeDiameterSelect');
     const edgeEngineeringStatusSelect = container.querySelector('#edgeEngineeringStatusSelect');
 
-    edgeTypeSelect.addEventListener('change', (e) => {
-      edge.edge_type = e.target.value;
-      saveToStorage();
-      scheduleDraw();
-    });
+    wireEdgeType(container, 'edgeType', edge);
     edgeMaterialSelect.addEventListener('change', (e) => {
       edge.material = e.target.value;
       saveToStorage();

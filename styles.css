@@ -2255,6 +2255,47 @@ input.floating-keyboard-active {
   line-height: 1.35;
 }
 
+/* Line type (סוג קו) radio group.
+   Two options shown side by side rather than in a dropdown: on a phone a
+   dropdown hides the unpicked option behind a tap, which is how a קו משני ends
+   up left as קו ראשי. Each swatch is the colour that line is drawn in, pulled
+   from the same tokens the canvas and the toolbar use. */
+.edge-type-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.edge-type-option {
+  display: inline-flex;
+  align-items: center;
+  /* border-box so a min-height means the height you actually see; with the
+     default content-box the phone rule below reads as height + padding +
+     border, which is how a "34px" chip rendered at 44px. */
+  box-sizing: border-box;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+.edge-type-option input { margin: 0; accent-color: var(--color-primary); }
+.edge-type-option:has(input:checked) {
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.08);
+  font-weight: 600;
+}
+.edge-type-swatch {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
 /* Fall type (סוג מפל) radio group.
    Disabled until a fall depth is entered — a fall type without a depth would
    be a claim the surveyor has not actually measured. */
@@ -2267,14 +2308,18 @@ input.floating-keyboard-active {
 .fall-type-option {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  /* border-box so a min-height means the height you actually see; with the
+     default content-box the phone rule below reads as height + padding +
+     border, which is how a "34px" chip rendered at 44px. */
+  box-sizing: border-box;
+  gap: 5px;
+  padding: 4px 8px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--color-surface);
   cursor: pointer;
-  font-size: 0.88rem;
-  line-height: 1.2;
+  font-size: 0.8rem;
+  line-height: 1.15;
 }
 .fall-type-option input { margin: 0; accent-color: var(--color-primary); }
 .fall-type-option:has(input:checked) {
@@ -2392,14 +2437,21 @@ input.floating-keyboard-active {
     min-height: 44px;
     font-size: 16px;
   }
-  #detailsContainer .fall-type-option {
-    min-height: 44px;
-    font-size: 15px;
+  /* These chips are a short list of short words, so they do not need the 44px
+     row a free-text field does. Trimmed to stay comfortably tappable while
+     letting all three fit without wrapping. */
+  #detailsContainer .fall-type-option,
+  #detailsContainer .edge-type-option {
+    min-height: 36px;
+    font-size: 13px;
   }
-  #detailsContainer input[type="checkbox"],
-  #detailsContainer input[type="radio"] {
+  #detailsContainer input[type="checkbox"] {
     width: 20px;
     height: 20px;
+  }
+  #detailsContainer input[type="radio"] {
+    width: 16px;
+    height: 16px;
   }
   .canvas-toolbar .btn { min-height: 44px; }
 }
