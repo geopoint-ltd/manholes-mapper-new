@@ -26,13 +26,11 @@ const COLORS_LIGHT = {
     badgeIcon: '#ffffff',     // white (badge icon)
   },
   edge: {
-    typePrimary: '#2563eb',   // blue-600
-    typeSecondary: '#0d9488', // teal-600
-    typeDrainage: '#fb923c',  // orange-400 (drainage line)
+    typePrimary: '#2563eb',   // blue-600 (קו ראשי)
+    typeSecondary: '#0d9488', // teal-600 (קו משני)
     selected: '#7c3aed',      // violet-600
     selectedPrimary: '#60a5fa', // blue-400 (selected primary)
-    selectedDrainage: '#fdba74', // orange-300 (selected drainage)
-    selectedSecondary: '#86efac', // green-300 (selected secondary)
+    selectedSecondary: '#5eead4', // teal-300 (selected secondary — same hue as the type)
     preview: '#94a3b8',       // slate-400
     label: '#334155',         // slate-700 (dark text for light mode)
     labelStroke: '#ffffff',   // white stroke for light mode
@@ -64,13 +62,11 @@ const COLORS_DARK = {
     badgeIcon: '#f0fdf4',     // green-50 (light badge icon for dark mode)
   },
   edge: {
-    typePrimary: '#60a5fa',   // blue-400 (lighter for dark mode)
-    typeSecondary: '#14b8a6', // teal-500 (lighter for dark mode)
-    typeDrainage: '#fb923c',  // orange-400 (drainage line - same for both modes)
+    typePrimary: '#60a5fa',   // blue-400 (קו ראשי — lighter for dark mode)
+    typeSecondary: '#2dd4bf', // teal-400 (קו משני — lighter for dark mode)
     selected: '#a78bfa',      // violet-400 (lighter for dark mode)
     selectedPrimary: '#93c5fd', // blue-300 (selected primary for dark mode)
-    selectedDrainage: '#fdba74', // orange-300 (selected drainage - same for both modes)
-    selectedSecondary: '#6ee7b7', // green-300 (selected secondary for dark mode)
+    selectedSecondary: '#99f6e4', // teal-200 (selected secondary for dark mode)
     preview: '#94a3b8',       // slate-400
     label: '#f1f5f9',         // slate-100 (light text for dark mode)
     labelStroke: '#1e293b',   // slate-800 (dark stroke for dark mode)
@@ -197,26 +193,67 @@ export const EDGE_LINE_DIAMETERS = [
   '10','25','26','50','75','100','150','160','200','250','300','350','400','500','600','650','700','800','900','1000','1250','1500','1800','2000'
 ];
 
-export const EDGE_TYPES = ['קו ראשי', 'קו סניקה', 'קו משני'];
-
-export const EDGE_TYPE_COLORS = {
-  'קו ראשי': COLORS.edge.typePrimary,
-  'קו סניקה': COLORS.edge.typeDrainage,
-  'קו משני': COLORS.edge.typeSecondary,
-};
-
-// Colors used when an edge is selected: slightly lighter variant per edge type
-export const EDGE_TYPE_SELECTED_COLORS = {
-  'קו ראשי': COLORS.edge.selectedPrimary,
-  'קו סניקה': COLORS.edge.selectedDrainage,
-  'קו משני': COLORS.edge.selectedSecondary,
-};
-
+// Line type (LineSubtyp / סיווג תפקוד). The codes are the geodatabase
+// domain LineSubType_1 verbatim — 4801 קו ראשי / 4802 קו משני / 4803 קו סניקה —
+// so an exported CSV drops straight into SW_Pipe_C without a translation step.
+//
+// The app used to send 4802 for קו סניקה and 4803 for קו משני, which is the
+// domain read backwards. Every pipe loaded so far is 4801, so nothing in the
+// geodatabase carries the old meaning.
+//
+// קו סניקה (4803) is deliberately absent: this survey is wastewater only, and a
+// pressure line there is rare enough that it belongs in the note rather than in
+// a type anyone can pick by accident. See REMOVED_EDGE_TYPE below.
 export const EDGE_TYPE_OPTIONS = [
   { code: 4801, label: 'קו ראשי' },
-  { code: 4802, label: 'קו סניקה' },
-  { code: 4803, label: 'קו משני' },
+  { code: 4802, label: 'קו משני' },
 ];
+
+export const EDGE_TYPES = EDGE_TYPE_OPTIONS.map((o) => o.label);
+
+/** Retired line type. Kept only so old sketches can be recognised and converted. */
+export const REMOVED_EDGE_TYPE = {
+  label: 'קו סניקה',
+  code: 4803,
+  /** What a line of that type becomes when an old sketch is opened. */
+  replacement: 'קו ראשי',
+};
+
+/**
+ * Resolve a label -> color map against the theme in force right now.
+ *
+ * COLORS is a Proxy that reads the media query on every access, so a plain
+ * object literal would freeze whichever theme happened to be active when this
+ * module was first evaluated — and lines would keep their light-mode colors
+ * after the phone switched to dark. Reading through a Proxy keeps every lookup
+ * live, without touching the call sites that index these maps by label.
+ */
+function themeAwareColorMap(colorKeyByLabel) {
+  return new Proxy({}, {
+    get: (_t, label) => {
+      const key = colorKeyByLabel[label];
+      return key ? COLORS.edge[key] : undefined;
+    },
+    has: (_t, label) => label in colorKeyByLabel,
+    ownKeys: () => Object.keys(colorKeyByLabel),
+    getOwnPropertyDescriptor: (_t, label) => (
+      label in colorKeyByLabel
+        ? { enumerable: true, configurable: true, value: COLORS.edge[colorKeyByLabel[label]] }
+        : undefined
+    ),
+  });
+}
+
+export const EDGE_TYPE_COLORS = themeAwareColorMap({
+  'קו ראשי': 'typePrimary',
+  'קו משני': 'typeSecondary',
+});
+
+// Colors used when an edge is selected: slightly lighter variant per edge type
+export const EDGE_TYPE_SELECTED_COLORS = themeAwareColorMap({
+  'קו ראשי': 'selectedPrimary',
+  'קו משני': 'selectedSecondary',
+});
 
 export const EDGE_ENGINEERING_STATUS = [
   { code: 0, label: 'לא ידוע' },

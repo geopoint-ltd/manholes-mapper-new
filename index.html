@@ -242,9 +242,12 @@
         <canvas id="graphCanvas"></canvas>
         <div class="canvas-toolbar">
           <div class="segmented" id="modeGroup">
-            <button id="nodeModeBtn" class="btn" title=""></button>
-            <button id="homeNodeModeBtn" class="btn" title=""></button>
-            <button id="edgeModeBtn" class="btn" title=""></button>
+            <button id="nodeModeBtn" class="btn mode-node" title=""></button>
+            <button id="homeNodeModeBtn" class="btn mode-home" title=""></button>
+            <!-- One button per line type. The colour on each matches the colour
+                 that line is drawn in, so the toolbar doubles as the legend. -->
+            <button id="edgeModeBtn" class="btn mode-edge mode-edge-primary" title=""></button>
+            <button id="edgeSecondaryModeBtn" class="btn mode-edge mode-edge-secondary" title=""></button>
           </div>
         </div>
         <div id="toast"></div>

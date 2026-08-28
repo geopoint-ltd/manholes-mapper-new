@@ -35,7 +35,7 @@ import { distanceToSegment } from '../utils/geometry.js';
 import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
 import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
-import { migrateGraph, SCHEMA_VERSION } from '../utils/schema-migration.js';
+import { migrateGraph, SCHEMA_VERSION, takeRemovedEdgeTypeCount } from '../utils/schema-migration.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
 import { drawInfiniteGrid as drawInfiniteGridFeature, renderEdgeLegend as renderEdgeLegendFeature, drawEdge as drawEdgeFeature, drawNode as drawNodeFeature } from '../features/rendering.js';
@@ -50,6 +50,7 @@ const homeBtn = document.getElementById('homeBtn');
 const nodeModeBtn = document.getElementById('nodeModeBtn');
 const homeNodeModeBtn = document.getElementById('homeNodeModeBtn');
 const edgeModeBtn = document.getElementById('edgeModeBtn');
+const edgeSecondaryModeBtn = document.getElementById('edgeSecondaryModeBtn');
 // Separate export buttons for nodes and edges
 const exportNodesBtn = document.getElementById('exportNodesBtn');
 const exportEdgesBtn = document.getElementById('exportEdgesBtn');
@@ -180,6 +181,10 @@ let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 // Current interaction mode: 'node' to create nodes, 'edge' to create edges
 let currentMode = 'node';
+// Which line type the edge buttons will give a newly drawn line. Held here
+// rather than read from the admin default so the button you pressed is the
+// type you get — there is no hidden second source of truth.
+let currentEdgeType = EDGE_TYPES[0];
 let pendingEdgeTail = null;
 let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
@@ -346,6 +351,28 @@ const defaultAdminConfig = {
   }
 };
 
+/**
+ * Force the line-type list back to the built-in one.
+ *
+ * The stored settings blob replaces `edges` wholesale, so a device that saved
+ * settings under an older build still carries the three-entry list — including
+ * קו סניקה, and the codes 4802/4803 the wrong way round. Those codes are the
+ * geodatabase domain LineSubType_1, not a preference, so a stale saved copy
+ * would quietly export pipes under the wrong subtype. This list is owned by the
+ * code; anything a device saved for it is discarded.
+ */
+function normalizeEdgeTypeConfig(cfg) {
+  if (!cfg || !cfg.edges) return;
+  cfg.edges.options = cfg.edges.options || {};
+  cfg.edges.options.edge_type = EDGE_TYPE_OPTIONS.map(
+    (o) => ({ code: o.code, label: o.label, enabled: true })
+  );
+  cfg.edges.defaults = cfg.edges.defaults || {};
+  if (!EDGE_TYPES.includes(cfg.edges.defaults.edge_type)) {
+    cfg.edges.defaults.edge_type = EDGE_TYPES[0];
+  }
+}
+
 let adminConfig = (() => {
   try {
     const raw = localStorage.getItem(ADMIN_STORAGE_KEY);
@@ -364,6 +391,7 @@ let adminConfig = (() => {
     merged.edges.defaults = merged.edges.defaults || {};
     // Undo labels that an earlier settings save truncated at an embedded quote
     repairTruncatedAdminLabels(merged);
+    normalizeEdgeTypeConfig(merged);
     return merged;
   } catch (e) {
     console.warn('Failed to load admin config; using defaults', e);
@@ -1011,10 +1039,18 @@ function applyLangToStaticUI() {
     homeNodeModeBtn.title = t('modeHome');
     homeNodeModeBtn.setAttribute('aria-label', t('modeHome'));
   }
+  // Each line button draws the pipe it creates, in that type's colour, instead
+  // of a shared icon — the colour is the only thing that distinguishes them,
+  // so it has to be the thing you see.
   if (edgeModeBtn) {
-    edgeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">timeline</span>';
-    edgeModeBtn.title = t('modeEdge');
-    edgeModeBtn.setAttribute('aria-label', t('modeEdge'));
+    edgeModeBtn.innerHTML = '<span class="line-glyph" aria-hidden="true"></span>';
+    edgeModeBtn.title = t('modeEdgePrimary');
+    edgeModeBtn.setAttribute('aria-label', t('modeEdgePrimary'));
+  }
+  if (edgeSecondaryModeBtn) {
+    edgeSecondaryModeBtn.innerHTML = '<span class="line-glyph" aria-hidden="true"></span>';
+    edgeSecondaryModeBtn.title = t('modeEdgeSecondary');
+    edgeSecondaryModeBtn.setAttribute('aria-label', t('modeEdgeSecondary'));
   }
   if (zoomInBtn) { zoomInBtn.title = t('zoomIn'); }
   if (zoomOutBtn) { zoomOutBtn.title = t('zoomOut'); }
@@ -1256,6 +1292,7 @@ function loadFromStorage() {
     // Must run before the back-compat defaults below: they would fill in
     // fall_type and the migration would no longer see the legacy value.
     schemaVersion = migrateGraph(nodes, edges, parsed.schemaVersion);
+    reportSchemaMigration();
     creationDate = parsed.creationDate || null;
     currentSketchId = parsed.sketchId || null;
     currentSketchName = parsed.sketchName || null;
@@ -1436,6 +1473,7 @@ function loadFromLibrary(sketchId) {
   edges = rec.edges || [];
   // Before the back-compat defaults below, for the same reason as above.
   schemaVersion = migrateGraph(nodes, edges, rec.schemaVersion);
+  reportSchemaMigration();
   // Backward compatibility for nodes
   nodes.forEach((node) => {
     if (node.material === undefined) node.material = NODE_MATERIALS[0];
@@ -1661,7 +1699,10 @@ function createEdge(tailId, headId) {
     fall_depth: (adminConfig.edges?.defaults?.fall_depth ?? ''),
     fall_type: (adminConfig.edges?.defaults?.fall_type ?? 0),
     line_diameter: (adminConfig.edges?.defaults?.line_diameter ?? ''),
-    edge_type: (adminConfig.edges?.defaults?.edge_type ?? EDGE_TYPES[0]),
+    // The line type comes from the button that is armed, not from the admin
+    // default — pressing "קו משני" and getting a קו ראשי would be a lie.
+    edge_type: currentEdgeType,
+    note: '',
     material: (adminConfig.edges?.defaults?.material ?? EDGE_MATERIALS[0]),
     maintenanceStatus: 0,
     engineeringStatus: (adminConfig.edges?.defaults?.engineering_status ?? 0),
@@ -1818,7 +1859,68 @@ function draw() {
 
 function renderEdgeLegend() {
   const legend = document.getElementById('edgeLegend');
+  syncEdgeTypeCssVars();
   renderEdgeLegendFeature(legend, EDGE_TYPE_COLORS);
+}
+
+/**
+ * Publish the canvas line colours as CSS variables.
+ *
+ * The toolbar glyphs and the legend swatches are CSS, the line itself is
+ * canvas. Copying the palette across on every draw — which includes the redraw
+ * triggered by a light/dark switch — means the button can never end up showing
+ * a colour the canvas no longer uses.
+ */
+function syncEdgeTypeCssVars() {
+  const root = document.documentElement;
+  root.style.setProperty('--edge-primary', EDGE_TYPE_COLORS[EDGE_TYPES[0]]);
+  root.style.setProperty('--edge-secondary', EDGE_TYPE_COLORS[EDGE_TYPES[1]]);
+}
+
+/**
+ * Tell the surveyor when opening a sketch rewrote something under them.
+ *
+ * Retiring קו סניקה silently would leave a line reading קו ראשי that the
+ * surveyor is sure they marked otherwise, so the conversion gets said out loud
+ * once — the note it wrote is where the original type now lives.
+ */
+function reportSchemaMigration() {
+  const converted = takeRemovedEdgeTypeCount();
+  if (converted === 0) return;
+  // Deferred, and held longer than a routine toast. Loading a sketch emits its
+  // own "השרטוט נפתח" immediately after this call, and a toast replaces rather
+  // than queues — announcing the conversion synchronously means it is wiped a
+  // millisecond later and the surveyor never learns their line was rewritten.
+  setTimeout(() => showToast(t('toasts.removedEdgeTypeConverted', converted), 6000), 0);
+}
+
+/**
+ * Switch drawing mode and light the one button that is now active.
+ *
+ * @param {'node'|'home'|'edge'} mode
+ * @param {{edgeType?: string, toast?: string}} [options] edgeType applies to
+ *   'edge' only and becomes the type of every line drawn until it changes.
+ */
+function setMode(mode, options = {}) {
+  commitIdInputIfFocused();
+  currentMode = mode;
+  if (mode === 'edge' && options.edgeType) currentEdgeType = options.edgeType;
+
+  // Exactly one button is lit, and for 'edge' it is the one whose line type is
+  // armed — otherwise the surveyor cannot tell which line they are about to draw.
+  const activeBtn = mode === 'node' ? nodeModeBtn
+    : mode === 'home' ? homeNodeModeBtn
+      : (currentEdgeType === EDGE_TYPES[1] ? edgeSecondaryModeBtn : edgeModeBtn);
+  [nodeModeBtn, homeNodeModeBtn, edgeModeBtn, edgeSecondaryModeBtn].forEach((btn) => {
+    if (btn) btn.classList.toggle('active', btn === activeBtn);
+  });
+
+  pendingEdgeTail = null;
+  pendingEdgePreview = null;
+  selectedNode = null;
+  selectedEdge = null;
+  renderDetails();
+  if (options.toast) showToast(options.toast);
 }
 
 /**
@@ -2683,6 +2785,14 @@ function renderDetails() {
         </div>
       </div>` : ''}
 
+      ${adminConfig.edges.include.note ? `
+      <div class="details-section">
+        <div class="field">
+          <label for="edgeNoteInput">${t('labels.edgeNote')}</label>
+          <textarea id="edgeNoteInput" rows="2" placeholder="${t('labels.edgeNotePlaceholder')}" dir="auto">${escapeHtml(edge.note || '')}</textarea>
+        </div>
+      </div>` : ''}
+
       ${(headNode && headNode.note) ? `
       <div class="details-section">
         <div class="field">
@@ -2712,6 +2822,13 @@ function renderDetails() {
       saveToStorage();
       scheduleDraw();
     });
+    const edgeNoteInput = container.querySelector('#edgeNoteInput');
+    if (edgeNoteInput) {
+      edgeNoteInput.addEventListener('input', (e) => {
+        edge.note = e.target.value;
+        debouncedSaveToStorage();
+      });
+    }
     if (edgeDiameterSelect) {
       edgeDiameterSelect.addEventListener('change', (e) => {
         edge.line_diameter = String(e.target.value || '');
@@ -3399,13 +3516,7 @@ newSketchBtn.addEventListener('click', () => {
   pendingEdgeTail = null;
   pendingEdgePreview = null;
   // Reset modes to node creation by default
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-  selectedNode = null;
-  selectedEdge = null;
-  renderDetails();
+  setMode('node');
   // Reset date input to today by default
   dateInput.value = new Date().toISOString().substr(0, 10);
   startPanel.style.display = 'flex';
@@ -3428,12 +3539,7 @@ startBtn.addEventListener('click', () => {
   }
   newSketch(dateVal);
   // Reset mode and button states on new sketch
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-  selectedNode = null;
-  selectedEdge = null;
+  setMode('node');
   startPanel.style.display = 'none';
   showToast(t('toasts.createdNew'));
 });
@@ -3447,51 +3553,28 @@ if (cancelBtn) {
   });
 }
 
-// Mode selection buttons
+// Mode selection buttons.
+//
+// There are now two line buttons — one per line type — so the "clear the other
+// three buttons" dance is done once here instead of being copied per handler,
+// which is how the home button came to leave the edge button lit.
 if (nodeModeBtn) {
-  nodeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'node';
-    nodeModeBtn.classList.add('active');
-    if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('toasts.nodeMode'));
-  });
+  nodeModeBtn.addEventListener('click', () => setMode('node', { toast: t('toasts.nodeMode') }));
 }
 if (homeNodeModeBtn) {
-  homeNodeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'home';
-    homeNodeModeBtn.classList.add('active');
-    if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('home'));
-  });
+  homeNodeModeBtn.addEventListener('click', () => setMode('home', { toast: t('home') }));
 }
 if (edgeModeBtn) {
-  edgeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'edge';
-    edgeModeBtn.classList.add('active');
-    if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('toasts.edgeMode'));
-  });
+  edgeModeBtn.addEventListener('click', () => setMode('edge', {
+    edgeType: EDGE_TYPES[0],
+    toast: t('toasts.edgeModePrimary'),
+  }));
+}
+if (edgeSecondaryModeBtn) {
+  edgeSecondaryModeBtn.addEventListener('click', () => setMode('edge', {
+    edgeType: EDGE_TYPES[1],
+    toast: t('toasts.edgeModeSecondary'),
+  }));
 }
 // Zoom buttons
 if (zoomInBtn) {
@@ -3612,6 +3695,7 @@ if (importSketchBtn && importSketchFile) {
       nodes = importedSketch.nodes;
       edges = importedSketch.edges;
       schemaVersion = migrateGraph(nodes, edges, importedSketch.schemaVersion);
+      reportSchemaMigration();
       nextNodeId = importedSketch.nextNodeId;
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
@@ -3972,26 +4056,21 @@ document.addEventListener('keydown', (e) => {
 
   // Mode toggles
   if (!isTyping && (e.key === 'n' || e.key === 'N')) {
-    if (nodeModeBtn && edgeModeBtn) {
-      nodeModeBtn.click();
-      e.preventDefault();
-    } else {
-      currentMode = 'node';
-      pendingEdgeTail = null;
-      pendingEdgePreview = null;
-      showToast(t('toasts.nodeMode'));
-    }
+    setMode('node', { toast: t('toasts.nodeMode') });
+    e.preventDefault();
   }
   if (!isTyping && (e.key === 'e' || e.key === 'E')) {
-    if (edgeModeBtn && nodeModeBtn) {
-      edgeModeBtn.click();
-      e.preventDefault();
-    } else {
-      currentMode = 'edge';
-      pendingEdgeTail = null;
-      pendingEdgePreview = null;
-      showToast(t('toasts.edgeMode'));
-    }
+    // E enters line mode on קו ראשי; pressing it again while already in line
+    // mode flips to the other type, so one key still reaches both without
+    // asking anyone to memorise a second letter.
+    const nextType = (currentMode === 'edge' && currentEdgeType === EDGE_TYPES[0])
+      ? EDGE_TYPES[1]
+      : EDGE_TYPES[0];
+    setMode('edge', {
+      edgeType: nextType,
+      toast: nextType === EDGE_TYPES[1] ? t('toasts.edgeModeSecondary') : t('toasts.edgeModePrimary'),
+    });
+    e.preventDefault();
   }
   if (!isTyping && (e.key === 's' || e.key === 'S')) {
     // Manual save
@@ -4287,10 +4366,7 @@ async function init() {
     if (rec && rec.name) currentSketchName = rec.name;
   }
   // Default interaction mode is node creation
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
+  setMode('node');
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
   renderDetails();
@@ -4302,6 +4378,12 @@ init();
 if (window.matchMedia) {
   const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
   darkModeQuery.addEventListener('change', () => {
+    // Update the CSS colours here rather than leaving it to the redraw. They are
+    // written as inline custom properties, so they outrank the stylesheet's
+    // media query — if the theme flips while the tab is hidden no frame is
+    // rendered, and the toolbar and legend would keep the old theme's colours
+    // until something else triggered a draw.
+    syncEdgeTypeCssVars();
     scheduleDraw();
   });
 }
