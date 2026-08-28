@@ -1,0 +1,342 @@
+/* Field guide.
+ *
+ * Phone first: one column, sideways-scrolling tabs, generous tap targets.
+ * From 900px the same content becomes a side rail plus a two-column body.
+ * Colours come from the app's own tokens so light, dark and RTL all follow.
+ */
+
+.help-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: none;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.help-screen.is-open { display: block; }
+body.help-open { overflow: hidden; }
+
+.help-shell {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+
+  /* figure palette, so the inline SVGs follow the theme */
+  --fig-line: var(--color-primary);
+  --fig-ink: #0f172a;
+  --fig-ok: #93c5fd;
+  --fig-warn: #fdba74;
+  --fig-accent: #a855f7;
+}
+
+/* ------------------------------------------------------------------- head */
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(0.75rem, env(safe-area-inset-top, 0px)) 1rem 0.75rem;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-strong) 100%);
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+.help-head__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.help-head__title h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.help-head .material-icons { font-size: 1.5rem; }
+.help-close { color: #fff; min-height: 44px; min-width: 44px; }
+.help-close:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* ----------------------------------------------------------------- search */
+
+.help-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.6rem 1rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex: 0 0 auto;
+}
+
+.help-search .material-icons { color: var(--color-muted); flex: 0 0 auto; }
+
+.help-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 16px; /* below 16px iOS zooms the page on focus */
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0 0.75rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.help-search input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* -------------------------------------------------------------------- nav */
+
+.help-nav {
+  display: flex;
+  gap: 6px;
+  padding: 0.6rem 1rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex: 0 0 auto;
+}
+
+.help-nav::-webkit-scrollbar { display: none; }
+
+.help-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.help-tab .material-icons { font-size: 1.1rem; }
+.help-tab:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+.help-tab.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- body */
+
+.help-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem 1rem max(2rem, env(safe-area-inset-bottom, 0px));
+}
+
+.help-section__head { margin-bottom: 0.85rem; }
+.help-section__head h2 { margin: 0 0 0.25rem; font-size: 1.05rem; font-weight: 700; }
+.help-section__head p { margin: 0; color: var(--color-muted); font-size: 0.92rem; line-height: 1.55; }
+
+.help-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  break-inside: avoid;
+}
+
+.help-card--warn {
+  border-color: rgba(234, 179, 8, 0.45);
+  background: rgba(234, 179, 8, 0.07);
+}
+
+.help-card--muted { background: var(--color-bg); }
+.help-card__title { margin: 0 0 0.5rem; font-size: 0.98rem; font-weight: 700; }
+.help-card__body { margin: 0 0 0.5rem; font-size: 0.93rem; line-height: 1.6; }
+.help-card > :last-child { margin-bottom: 0; }
+
+.help-steps, .help-list { margin: 0 0 0.5rem; padding-inline-start: 1.25rem; }
+.help-steps li, .help-list li { font-size: 0.93rem; line-height: 1.6; margin-bottom: 0.35rem; }
+
+.help-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: var(--color-bg);
+  font-size: 0.87rem;
+  line-height: 1.55;
+  color: var(--color-muted);
+}
+
+.help-note .material-icons { font-size: 1.05rem; color: var(--color-primary); flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ tables */
+
+.help-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.5rem 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.help-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+
+.help-table th {
+  text-align: start;
+  font-weight: 700;
+  background: var(--color-bg);
+  padding: 0.55rem 0.7rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.help-table td {
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--color-border);
+  line-height: 1.5;
+  vertical-align: top;
+}
+
+.help-table tr:last-child td { border-bottom: none; }
+.help-table td:first-child { font-weight: 600; }
+
+/* ---------------------------------------------------------------- figures */
+
+.help-figure {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-bg);
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+
+.help-figure svg { width: 100%; height: auto; display: block; }
+.help-figure .fig-label { font-size: 12px; fill: var(--color-muted); font-family: inherit; }
+.help-figure .fig-strong { fill: var(--color-text); font-weight: 700; }
+
+/* --------------------------------------------------------------------- QA */
+
+.help-qa {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.help-qa summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0.8rem 1rem;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.94rem;
+  list-style: none;
+}
+
+.help-qa summary::-webkit-details-marker { display: none; }
+.help-qa__chev { color: var(--color-muted); transition: transform 0.18s; flex: 0 0 auto; }
+.help-qa[open] .help-qa__chev { transform: rotate(180deg); }
+.help-qa[open] summary { border-bottom: 1px solid var(--color-border); }
+
+.help-qa__a {
+  padding: 0.8rem 1rem;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--color-muted);
+}
+
+/* -------------------------------------------------------------- shortcuts */
+
+.help-shortcuts { display: grid; gap: 0.4rem; }
+.help-shortcuts > div { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+
+.help-shortcuts kbd {
+  min-width: 3.2rem;
+  text-align: center;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--color-bg);
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+
+.help-empty { text-align: center; color: var(--color-muted); padding: 3rem 1rem; }
+.help-empty .material-icons { font-size: 2.5rem; opacity: 0.5; }
+
+/* ------------------------------------------------------------- wide screen */
+
+@media (min-width: 900px) {
+  .help-shell {
+    inset: 3vh 50%;
+    transform: translateX(50%);
+    width: min(1100px, 94vw);
+    max-height: 94vh;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-areas:
+      "head head"
+      "search search"
+      "nav body";
+  }
+  .help-head { grid-area: head; }
+  .help-search { grid-area: search; }
+
+  /* the sections become a rail instead of a strip of chips */
+  .help-nav {
+    grid-area: nav;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom: none;
+    border-inline-end: 1px solid var(--color-border);
+    padding: 0.75rem;
+    gap: 4px;
+  }
+  .help-tab {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 10px;
+    min-height: 44px;
+  }
+  .help-body {
+    grid-area: body;
+    padding: 1.25rem 1.5rem;
+    columns: 2;
+    column-gap: 1rem;
+  }
+  .help-section { break-inside: avoid; }
+  .help-section__head { column-span: all; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .help-shell {
+    --fig-ink: #e2e8f0;
+    --fig-ok: #1d4ed8;
+    --fig-warn: #b45309;
+    --fig-accent: #c084fc;
+  }
+  .help-card--warn { background: rgba(234, 179, 8, 0.1); }
+}
