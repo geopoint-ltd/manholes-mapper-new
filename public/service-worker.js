@@ -16,7 +16,7 @@
 // the network was unavailable and there was no cached response, causing
 // offline pages to break.  Increasing the version here forces browsers
 // to pick up the updated logic.
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
@@ -34,11 +34,19 @@ const OFFLINE_URL = withBase('offline.html');
 // files are handled dynamically via the runtime caching logic below; they don't need to be
 // listed here explicitly. Keeping this list lean reduces churn across builds and avoids
 // broken cache entries when filenames change.
+// NOTE: styles.css is deliberately NOT precached.
+//
+// Everything in this list is served cache-first and never refreshed until
+// APP_VERSION changes. styles.css used to be here, which meant a stylesheet
+// shipped in v13 was pinned on every device that had ever opened the app —
+// so a CSS-only release was invisible to existing users no matter how many
+// times they reloaded. It now falls through to stale-while-revalidate at the
+// bottom of the fetch handler: still cached for offline use after the first
+// load, but picked up on the visit after a deploy.
 const PRECACHE_ASSETS = [
   withBase('index.html'),
   OFFLINE_URL,
   withBase('manifest.json'),
-  withBase('styles.css'),
   withBase('app_icon.png'),
   withBase('health/index.html')
 ];
