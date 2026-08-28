@@ -1,20 +1,25 @@
 // Rendering helpers that can be called from legacy code
-import { COLORS } from '../state/constants.js';
+import { COLORS, EDGE_TYPES } from '../state/constants.js';
 
 /**
  * Render the edge type legend into the provided container element.
+ *
+ * The entries come from EDGE_TYPES rather than a list written out here, so
+ * adding or retiring a line type updates the legend on its own — the old
+ * hardcoded list is how קו סניקה stayed in the legend after it stopped being
+ * something anyone should draw.
+ *
  * @param {HTMLElement|null} legendEl
  * @param {Record<string, string>} edgeTypeColors
  */
 export function renderEdgeLegend(legendEl, edgeTypeColors) {
   if (!legendEl) return;
-  const items = [
-    { label: 'קו ראשי', color: edgeTypeColors['קו ראשי'] || '#2563eb' },
-    { label: 'קו סניקה', color: edgeTypeColors['קו סניקה'] || '#fb923c' },
-    { label: 'קו משני', color: edgeTypeColors['קו משני'] || '#0d9488' },
-  ];
-  legendEl.innerHTML = items
-    .map((i) => `<span class="item"><span class="swatch" style="background:${i.color}"></span>${i.label}</span>`) 
+  legendEl.innerHTML = EDGE_TYPES
+    .map((label) => {
+      const color = edgeTypeColors[label] || COLORS.edge.typePrimary;
+      // A short stroke, not a square: it reads as the thing being drawn.
+      return `<span class="item"><span class="swatch" style="background:${color}"></span>${label}</span>`;
+    })
     .join('');
   legendEl.style.left = '12px';
   legendEl.style.right = 'auto';

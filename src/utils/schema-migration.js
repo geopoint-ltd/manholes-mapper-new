@@ -1,16 +1,19 @@
 // Schema migration for sketches captured before the field changes.
 //
-// Two changes made old values ambiguous rather than merely different:
+// Each step is keyed to the version it upgrades FROM, and only the steps a
+// sketch is actually behind on are applied. That matters more than it looks:
+// the v1 accuracy remap sends 1 -> 5, but under v2 a stored 1 already means
+// הנדסית. Running that step a second time would silently turn every surveyed
+// manhole into a schematic one, so a step must never run on data that has
+// already passed it.
 //
-//   accuracyLevel  0=הנדסית 1=סכימטית   ->  1=הנדסית 3=בינונית 5=סכימטית
-//   fall_position  0=פנימי  1=חיצוני    ->  fall_type 2=מפל חיצוני 3=מפל פנימי
-//
-// The overlap is the problem: a stored `1` means סכימטית under the old codes
-// and הנדסית under the new ones. Nothing in the value itself says which, so a
-// version stamp decides. Sketches written before this carry no stamp and are
-// migrated exactly once; anything already stamped is left alone.
+//   v1 -> v2  accuracyLevel  0=הנדסית 1=סכימטית  ->  1=הנדסית 3=בינונית 5=סכימטית
+//             fall_position  0=פנימי  1=חיצוני   ->  fall_type 2=חיצוני 3=פנימי
+//   v2 -> v3  edge_type      קו סניקה removed    ->  קו ראשי, original kept in the note
 
-export const SCHEMA_VERSION = 2;
+import { REMOVED_EDGE_TYPE } from '../state/constants.js';
+
+export const SCHEMA_VERSION = 3;
 
 /** Old accuracy code -> new one. */
 const ACCURACY_V1_TO_V2 = { 0: 1, 1: 5 };
@@ -18,7 +21,7 @@ const ACCURACY_V1_TO_V2 = { 0: 1, 1: 5 };
 /** Old fall_position code -> FallType. */
 const FALL_POSITION_TO_TYPE = { 0: 3, 1: 2 };
 
-function migrateNode(node) {
+function migrateNodeV1toV2(node) {
   if (!node || typeof node !== 'object') return;
   const old = node.accuracyLevel;
   if (old !== undefined && old !== null && old !== '') {
@@ -27,7 +30,7 @@ function migrateNode(node) {
   }
 }
 
-function migrateEdge(edge) {
+function migrateEdgeV1toV2(edge) {
   if (!edge || typeof edge !== 'object') return;
   if (edge.fall_type === undefined || edge.fall_type === null) {
     const legacy = edge.fall_position;
@@ -44,6 +47,62 @@ function migrateEdge(edge) {
 }
 
 /**
+ * Retire קו סניקה. The type is gone from the picker, so a line still carrying
+ * it would show a blank dropdown and export a code the app no longer offers.
+ * It becomes קו ראשי — but the original type is written to the front of the
+ * line's note first, because "this was a pressure line" is field knowledge that
+ * only the surveyor had, and the note is the one field that reaches the office
+ * intact.
+ *
+ * @returns {boolean} true when this edge was converted
+ */
+function migrateEdgeV2toV3(edge) {
+  if (!edge || typeof edge !== 'object') return false;
+  if (edge.edge_type !== REMOVED_EDGE_TYPE.label) return false;
+  edge.edge_type = REMOVED_EDGE_TYPE.replacement;
+  const existing = String(edge.note || '').trim();
+  // Don't stack the prefix if a sketch somehow gets migrated twice.
+  if (!existing.startsWith(REMOVED_EDGE_TYPE.label)) {
+    edge.note = existing ? `${REMOVED_EDGE_TYPE.label} - ${existing}` : REMOVED_EDGE_TYPE.label;
+  }
+  return true;
+}
+
+/** How many edges the last migration converted away from קו סניקה. */
+let lastRemovedEdgeTypeCount = 0;
+
+/**
+ * Number of lines the most recent migration moved off קו סניקה, so the caller
+ * can tell the surveyor what changed under them. Reading it clears the count.
+ */
+export function takeRemovedEdgeTypeCount() {
+  const n = lastRemovedEdgeTypeCount;
+  lastRemovedEdgeTypeCount = 0;
+  return n;
+}
+
+/** Apply every step the data is behind on, in order. */
+function applyMigrations(nodes, edges, from) {
+  const nodeList = Array.isArray(nodes) ? nodes : [];
+  const edgeList = Array.isArray(edges) ? edges : [];
+  if (from < 2) {
+    nodeList.forEach(migrateNodeV1toV2);
+    edgeList.forEach(migrateEdgeV1toV2);
+  }
+  if (from < 3) {
+    let converted = 0;
+    edgeList.forEach((e) => { if (migrateEdgeV2toV3(e)) converted += 1; });
+    lastRemovedEdgeTypeCount += converted;
+  }
+}
+
+/** A sketch with no stamp predates versioning, i.e. version 1. */
+function versionOf(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/**
  * Bring a loaded sketch up to the current schema, in place.
  *
  * @param {{nodes?: any[], edges?: any[], schemaVersion?: number}} sketch
@@ -51,9 +110,9 @@ function migrateEdge(edge) {
  */
 export function migrateSketch(sketch) {
   if (!sketch || typeof sketch !== 'object') return false;
-  if (Number(sketch.schemaVersion) >= SCHEMA_VERSION) return false;
-  if (Array.isArray(sketch.nodes)) sketch.nodes.forEach(migrateNode);
-  if (Array.isArray(sketch.edges)) sketch.edges.forEach(migrateEdge);
+  const from = versionOf(sketch.schemaVersion);
+  if (from >= SCHEMA_VERSION) return false;
+  applyMigrations(sketch.nodes, sketch.edges, from);
   sketch.schemaVersion = SCHEMA_VERSION;
   return true;
 }
@@ -67,8 +126,8 @@ export function migrateSketch(sketch) {
  * @returns {number} the version they are now at
  */
 export function migrateGraph(nodes, edges, schemaVersion) {
-  if (Number(schemaVersion) >= SCHEMA_VERSION) return Number(schemaVersion);
-  if (Array.isArray(nodes)) nodes.forEach(migrateNode);
-  if (Array.isArray(edges)) edges.forEach(migrateEdge);
+  const from = versionOf(schemaVersion);
+  if (from >= SCHEMA_VERSION) return from;
+  applyMigrations(nodes, edges, from);
   return SCHEMA_VERSION;
 }

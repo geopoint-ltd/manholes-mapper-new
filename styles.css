@@ -11,6 +11,16 @@
   --ring: 0 0 0 3px rgba(37, 99, 235, 0.3);
   --drawer-w: 320px; /* sidebar width for responsive offset */
   --drawer-height: 0px; /* dynamically updated by resizable-drawer.js */
+  /* Line-type colours. main.js overwrites these from the canvas palette on every
+     draw, so the toolbar glyph, the legend swatch and the drawn line are always
+     literally the same colour. The values here only cover the first paint. */
+  --edge-primary: #2563eb;   /* קו ראשי */
+  --edge-secondary: #0d9488; /* קו משני */
+  /* Header surface. Overridden in dark mode — see the dark block near the end. */
+  --header-from: #eaf2ff;
+  --header-to: #dbeafe;
+  --header-control-bg: rgba(255, 255, 255, 0.7);
+  --header-control-text: var(--color-text);
 }
 body {
   margin: 0;
@@ -46,7 +56,7 @@ header {
 }
 /* Soft light-blue header variant for better logo contrast */
 .soft-blue-header {
-  background: linear-gradient(135deg, #eaf2ff 0%, #dbeafe 100%);
+  background: linear-gradient(135deg, var(--header-from) 0%, var(--header-to) 100%);
   color: var(--color-text);
   box-shadow: var(--shadow);
   backdrop-filter: none;
@@ -116,18 +126,18 @@ header h1 {
   display: block;
 }
 .soft-blue-header #controls .toolbar-group {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--header-control-bg);
   border: 1px solid var(--color-border);
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   backdrop-filter: blur(2px);
 }
 .soft-blue-header .segmented {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
 }
 .soft-blue-header .segmented .btn { color: var(--color-text); }
 .soft-blue-header .segmented .btn:hover { background: #f1f5f9; }
-.soft-blue-header .btn-ghost { background: rgba(255,255,255,0.7); color: var(--color-text); border-color: var(--color-border); }
+.soft-blue-header .btn-ghost { background: var(--header-control-bg); color: var(--header-control-text); border-color: var(--color-border); }
 .soft-blue-header .btn-primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 .soft-blue-header .btn-primary:hover { background: var(--color-primary-strong); border-color: var(--color-primary-strong); }
 #controls {
@@ -246,8 +256,8 @@ header .segmented .btn {
 
 /* Soft blue header search styling */
 .soft-blue-header .search-input {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--color-text);
+  background: var(--header-control-bg);
+  color: var(--header-control-text);
   border-color: var(--color-border);
 }
 
@@ -256,7 +266,7 @@ header .segmented .btn {
 }
 
 .soft-blue-header .search-input:focus {
-  background: #ffffff;
+  background: var(--color-surface);
   border-color: var(--color-primary);
   box-shadow: var(--ring);
 }
@@ -278,7 +288,7 @@ header .segmented .btn {
 }
 
 .mobile-search .search-input:focus {
-  background: #ffffff;
+  background: var(--color-surface);
   border-color: var(--color-primary);
   box-shadow: var(--ring);
 }
@@ -376,36 +386,6 @@ header select.btn {
 }
 header select.btn option { color: #0f172a; }
 
-/* Button-like autosave control in header, toggle remains for state */
-.autosave-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem; /* match .btn spacing */
-  cursor: pointer;
-  height: 36px; /* match header buttons */
-  padding: 0 0.9rem; /* vertical padding handled by fixed height */
-  border-radius: 999px; /* pill like other header buttons */
-  line-height: 1; /* avoid extra vertical room */
-  box-sizing: border-box;
-}
-.autosave-btn input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  border: 2px solid currentColor;
-  position: relative;
-  margin: 0; /* remove default margins that increase height */
-}
-.autosave-btn input[type="checkbox"]:checked::after {
-  content: "check";
-  font-family: 'Material Icons';
-  font-size: 16px;
-  position: absolute;
-  left: -2px;
-  top: -2px;
-}
 .btn-danger {
   background: #ef4444; /* red-500 */
   color: #fff;
@@ -492,6 +472,34 @@ select.btn:focus-visible {
   background: var(--color-primary);
   color: #fff;
 }
+/* Line-type buttons.
+   Each one draws the pipe it creates rather than a generic icon, in that line
+   type's own colour — so the toolbar answers "which line am I about to draw?"
+   without a label, and it stays legible in either theme because the chrome
+   under it is always the same dark translucent chip. */
+.canvas-toolbar .segmented#modeGroup .btn.mode-edge {
+  position: relative;
+}
+.line-glyph {
+  display: block;
+  width: 20px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--glyph-color, var(--edge-primary));
+  /* A hairline ring keeps a mid-tone stroke readable on the dark chip. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+.mode-edge-primary { --glyph-color: var(--edge-primary); }
+.mode-edge-secondary { --glyph-color: var(--edge-secondary); }
+/* Active: the chip takes the line colour and the stroke inverts to white, so
+   the armed type is obvious at a glance in bright sun. */
+.canvas-toolbar .segmented .btn.mode-edge.active {
+  background: var(--glyph-color);
+}
+.canvas-toolbar .segmented .btn.mode-edge.active .line-glyph {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
 canvas { width: 100%; height: 100%; display: block; }
 /* Edge legend */
 .edge-legend {
@@ -499,7 +507,9 @@ canvas { width: 100%; height: 100%; display: block; }
   top: 12px;
   left: 12px;
   right: auto;
-  background: rgba(255,255,255,0.9);
+  /* Was a hardcoded white, which left the labels light-on-white in dark mode.
+     The surface token follows the theme, so the text stays readable in both. */
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: var(--shadow);
@@ -529,7 +539,8 @@ canvas { width: 100%; height: 100%; display: block; }
   box-shadow: var(--shadow);
 }
 .edge-legend .item { display: inline-flex; align-items: center; gap: 6px; }
-.edge-legend .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
+/* A stroke, not a square: the swatch is a miniature of the line it labels. */
+.edge-legend .swatch { width: 18px; height: 4px; border-radius: 999px; display: inline-block; }
 /* Sidebar for details and library */
 #sidebar {
   padding: 1rem;
@@ -644,7 +655,9 @@ canvas { width: 100%; height: 100%; display: block; }
   height: 32px;
   border-radius: 6px;
   border: 1px solid var(--color-border);
-  background: #fff;
+  /* Surface, not a hardcoded white: paired with --color-text this was a light
+     glyph on a white chip in dark mode — the sidebar's close button. */
+  background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -2106,7 +2119,29 @@ input.floating-keyboard-active {
     --color-muted: #94a3b8;
     --color-border: #1f2937;
     --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    /* The header used to keep its light-blue gradient here while --color-text
+       flipped to near-white, so every control inside it that inherited the text
+       colour went white-on-white: the search box, the language select and the
+       export icons were all invisible. Giving the header a dark surface of its
+       own is what actually fixes them, rather than patching each control. */
+    --header-from: #0f172a;
+    --header-to: #172554;
+    --header-control-bg: rgba(255, 255, 255, 0.08);
+    --header-control-text: #e2e8f0;
+    /* Lighter strokes so a line stays visible against the dark canvas. */
+    --edge-primary: #60a5fa;
+    --edge-secondary: #2dd4bf;
   }
+  .soft-blue-header { border-bottom-color: var(--color-border); }
+  /* The title gradient is defined light-first with a more specific selector,
+     so it has to be restated here or it stays dark-on-dark. */
+  .soft-blue-header #appTitle {
+    background: linear-gradient(90deg, #e2e8f0 0%, #80d6f9 42%, #80d6f9 58%, #e2e8f0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .soft-blue-header .search-icon { color: #cbd5e1; }
   header { box-shadow: none; }
   .btn { background: #0b1220; color: var(--color-text); border-color: var(--color-border); }
   .btn-primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
@@ -2200,16 +2235,8 @@ input.floating-keyboard-active {
     border-color: var(--color-border);
   }
 
-  .soft-blue-header .segmented {
-    background: #0f172a;
-  }
-
   .soft-blue-header .segmented .btn:hover {
     background: #1e293b;
-  }
-
-  .soft-blue-header .search-input:focus {
-    background: #0f172a;
   }
 }
 
@@ -2306,16 +2333,6 @@ input.floating-keyboard-active {
   #mobileMenu .btn:last-child { margin-bottom: 0; }
   #mobileMenu select { min-height: 44px; }
   #mobileMenu .search-input { min-height: 44px; font-size: 16px; }
-  /* the autosave checkbox was a 13px target; grow it and its whole row */
-  #mobileMenu label {
-    min-height: 44px;
-    margin-bottom: 0.35rem;
-  }
-  #mobileMenu input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    flex: 0 0 auto;
-  }
 }
 
 /* --- details drawer: usable form area on a phone -------------------------
