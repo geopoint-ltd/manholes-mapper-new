@@ -2249,3 +2249,209 @@ input.floating-keyboard-active {
 }
 .fall-type-options.is-disabled { opacity: 0.5; }
 .fall-type-options.is-disabled .fall-type-option { cursor: not-allowed; }
+
+/* The admin panel used to carry an inline `margin: 1rem auto`, which no
+   stylesheet rule could override — so the phone layout could not remove it.
+   Same look on desktop, now overridable. */
+#adminScreen .admin-container {
+  margin: 1rem auto;
+}
+
+/* ==========================================================================
+   Phone polish (2026-08-28)
+   --------------------------------------------------------------------------
+   Layout and touch-target fixes for phones. Presentation only — no control
+   changes hands, nothing is hidden that was reachable before, and every rule
+   is additive so the desktop layout is untouched.
+   ========================================================================== */
+
+/* --- the overflow menu could not be scrolled ------------------------------
+   It is fixed-positioned with no height limit, so on a 360x640 phone its 13
+   entries ran 142px past the bottom of the screen and Help and Settings were
+   simply unreachable. Cap it to the space actually available and let it
+   scroll; contain the scroll so the canvas behind it does not pan instead. */
+@media (max-width: 900px) {
+  #mobileMenu {
+    /* Anchor both edges rather than guessing a height: the menu is
+       content-box, so a max-height alone let its padding push it past the
+       bottom of the screen. */
+    box-sizing: border-box;
+    top: 3.5rem;
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* logical inset so it sits under the button in RTL as well as LTR */
+    right: auto;
+    inset-inline-end: 0.75rem;
+    max-width: min(20rem, calc(100vw - 1.5rem));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+    scrollbar-width: thin;
+  }
+  /* comfortable, evenly sized rows instead of tightly stacked buttons */
+  #mobileMenu .btn {
+    min-height: 44px;
+    margin-bottom: 0.35rem;
+    border-radius: 10px;
+  }
+  #mobileMenu .btn:last-child { margin-bottom: 0; }
+  #mobileMenu select { min-height: 44px; }
+  #mobileMenu .search-input { min-height: 44px; font-size: 16px; }
+  /* the autosave checkbox was a 13px target; grow it and its whole row */
+  #mobileMenu label {
+    min-height: 44px;
+    margin-bottom: 0.35rem;
+  }
+  #mobileMenu input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+  }
+}
+
+/* --- details drawer: usable form area on a phone -------------------------
+   The sheet was min(40vh, 50dvh) tall, which on a 640px-high phone left a
+   144px window to scroll a 1370px form through. Give it room, and let the
+   fields take every pixel the handle and header do not. */
+@media (max-width: 600px) {
+  /* #sidebar (ID) already sets height:auto / max-height:40vh in this same
+     media query, so a plain .drawer rule loses on specificity. Match the ID
+     to actually raise the sheet. */
+  #sidebar.drawer {
+    height: min(68vh, 70dvh);
+    max-height: 78dvh;
+    display: flex;
+    flex-direction: column;
+    /* keep the sheet clear of the home indicator on modern phones */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.16);
+  }
+  #sidebar-header { flex: 0 0 auto; }
+  /* the fields get the remaining height rather than a fixed sliver */
+  #detailsContainer {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 1rem;
+  }
+  /* make the drag affordance obvious — the sheet is resizable, but at 20px
+     of blank space nobody discovered it */
+  .sidebar-drag-handle {
+    flex: 0 0 auto;
+    position: relative;
+    touch-action: none;
+  }
+  .sidebar-drag-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--color-border);
+  }
+}
+
+/* --- touch targets and iOS zoom ------------------------------------------
+   Anything under ~44px is hard to hit with a thumb in the field, and iOS
+   Safari zooms the whole page when a font smaller than 16px takes focus. */
+@media (max-width: 600px) {
+  #detailsContainer input:not([type="checkbox"]):not([type="radio"]),
+  #detailsContainer select,
+  #detailsContainer textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #detailsContainer .fall-type-option {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  #detailsContainer input[type="checkbox"],
+  #detailsContainer input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+  .canvas-toolbar .btn { min-height: 44px; }
+}
+
+/* --- admin settings on a phone -------------------------------------------
+   Two problems: the options table is 500px wide inside a 274px column and was
+   being clipped outright (its Code and Delete columns unreachable), and the
+   scrolling content area was only 282px tall. The table now lives in
+   .option-table-wrapper, which scrolls horizontally. */
+@media (max-width: 768px) {
+  /* the settings panel was a 576px card floating in a 640px screen, leaving a
+     282px window to scroll 21,000px of settings through. On a phone it should
+     simply be the screen. */
+  /* the panel sits below the app header inside a padded #adminScreen, so a
+     flat 100dvh overhangs the bottom by exactly that offset. Drop the padding
+     and size against the header variable the app already maintains. */
+  /* Let the panel simply fill the space below the app header instead of
+     computing a height: the container also carries a margin, so any arithmetic
+     here overshoots by exactly that much. */
+  #adminScreen {
+    padding: 0;
+    box-sizing: border-box;
+    height: calc(100dvh - var(--header-h, 56px));
+    overflow: hidden;
+  }
+  #adminScreen .admin-container,
+  .admin-container {
+    box-sizing: border-box;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    /* both physical and logical, since the panel's own margin is set with
+       logical properties and a plain `margin` does not override those */
+    margin: 0;
+    margin-block: 0;
+    margin-inline: 0;
+    width: 100%;
+    max-width: none;
+  }
+  /* trim the chrome so the trimmings do not eat the content */
+  .admin-header { padding: 0.75rem 1rem; }
+  .admin-header h2 { font-size: 1.1rem; }
+
+  #adminScreenContent,
+  .admin-content {
+    max-height: none;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* header and tabs stay put while the settings scroll under them */
+  .admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--color-surface);
+  }
+  .admin-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-surface);
+  }
+  .option-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .option-table { min-width: 30rem; }
+  /* every control in settings reachable with a thumb */
+  .admin-section button,
+  .admin-group-toggle {
+    min-height: 44px;
+  }
+  .option-table input[type="text"] {
+    min-height: 40px;
+    font-size: 16px;
+  }
+  .option-table .btn-sm { min-height: 36px; }
+}

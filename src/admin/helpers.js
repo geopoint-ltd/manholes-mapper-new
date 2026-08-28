@@ -91,10 +91,12 @@ export function buildOptionsEditorModal(adminConfig, t, title, cfgKey, specs) {
       <div class="admin-group-content">
         <div class="field">
           <div class="admin-desc">${t('admin.optionsDesc')}</div>
+          <div class="option-table-wrapper">
           <table class="option-table" style="width:100%;">
             <thead><tr><th class="opt-enabled">${t('admin.thEnabled')}</th><th class="opt-label">${t('admin.thLabel')}</th><th class="opt-code">${t('admin.thCode')}</th><th class="opt-actions"></th></tr></thead>
             <tbody data-opt-body="${cfgKey}:${spec.optionsKey}">${rows}</tbody>
           </table>
+          </div>
           <div style="margin-top:6px;"><button class="btn" data-opt-add="${cfgKey}:${spec.optionsKey}">${t('admin.addOption')}</button></div>
         </div>
       </div>
@@ -189,10 +191,12 @@ export function buildOptionsEditorScreen(adminConfig, t, title, cfgKey, specs) {
       <div class="admin-group-content">
         <div class="field">
           <div class="admin-desc">${t('admin.optionsDesc')}</div>
+          <div class="option-table-wrapper">
           <table class="option-table" style="width:100%;">
             <thead><tr><th class="opt-enabled">${t('admin.thEnabled')}</th><th class="opt-label">${t('admin.thLabel')}</th><th class="opt-code">${t('admin.thCode')}</th><th class="opt-actions"></th></tr></thead>
             <tbody data-opt-body="${cfgKey}:${spec.optionsKey}">${rows}</tbody>
           </table>
+          </div>
           <div style="margin-top:6px;"><button class="btn" data-opt-add="${cfgKey}:${spec.optionsKey}">${t('admin.addOption')}</button></div>
         </div>
       </div>
