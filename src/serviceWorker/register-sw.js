@@ -1,8 +1,13 @@
 // Service worker registration and offline guards
 // This module intentionally tolerates absence of i18n `t` and relies on window.showToast when available.
 
+import { isPreviewBuild } from '../utils/deploy-target.js';
+
 (function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  // Never on a preview. Caching an unreviewed build onto a surveyor's phone is
+  // not something a pull request should be able to do — see deploy-target.js.
+  if (isPreviewBuild()) return;
   // Only register the service worker when served over HTTPS or from localhost.  Service
   // workers are not allowed on plain HTTP on most devices.  This check prevents
   // confusing errors during development.
