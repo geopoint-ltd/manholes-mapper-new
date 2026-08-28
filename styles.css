@@ -2249,3 +2249,372 @@ input.floating-keyboard-active {
 }
 .fall-type-options.is-disabled { opacity: 0.5; }
 .fall-type-options.is-disabled .fall-type-option { cursor: not-allowed; }
+
+/* The admin panel used to carry an inline `margin: 1rem auto`, which no
+   stylesheet rule could override — so the phone layout could not remove it.
+   Same look on desktop, now overridable. */
+#adminScreen .admin-container {
+  margin: 1rem auto;
+}
+
+/* ==========================================================================
+   Phone polish (2026-08-28)
+   --------------------------------------------------------------------------
+   Layout and touch-target fixes for phones. Presentation only — no control
+   changes hands, nothing is hidden that was reachable before, and every rule
+   is additive so the desktop layout is untouched.
+   ========================================================================== */
+
+/* --- the overflow menu could not be scrolled ------------------------------
+   It is fixed-positioned with no height limit, so on a 360x640 phone its 13
+   entries ran 142px past the bottom of the screen and Help and Settings were
+   simply unreachable. Cap it to the space actually available and let it
+   scroll; contain the scroll so the canvas behind it does not pan instead. */
+@media (max-width: 900px) {
+  #mobileMenu {
+    /* Anchor both edges rather than guessing a height: the menu is
+       content-box, so a max-height alone let its padding push it past the
+       bottom of the screen. */
+    box-sizing: border-box;
+    top: 3.5rem;
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* logical inset so it sits under the button in RTL as well as LTR */
+    right: auto;
+    inset-inline-end: 0.75rem;
+    max-width: min(20rem, calc(100vw - 1.5rem));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+    scrollbar-width: thin;
+  }
+  /* comfortable, evenly sized rows instead of tightly stacked buttons */
+  #mobileMenu .btn {
+    min-height: 44px;
+    margin-bottom: 0.35rem;
+    border-radius: 10px;
+  }
+  #mobileMenu .btn:last-child { margin-bottom: 0; }
+  #mobileMenu select { min-height: 44px; }
+  #mobileMenu .search-input { min-height: 44px; font-size: 16px; }
+  /* the autosave checkbox was a 13px target; grow it and its whole row */
+  #mobileMenu label {
+    min-height: 44px;
+    margin-bottom: 0.35rem;
+  }
+  #mobileMenu input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+  }
+}
+
+/* --- details drawer: usable form area on a phone -------------------------
+   The sheet was min(40vh, 50dvh) tall, which on a 640px-high phone left a
+   144px window to scroll a 1370px form through. Give it room, and let the
+   fields take every pixel the handle and header do not. */
+@media (max-width: 600px) {
+  /* #sidebar (ID) already sets height:auto / max-height:40vh in this same
+     media query, so a plain .drawer rule loses on specificity. Match the ID
+     to actually raise the sheet. */
+  #sidebar.drawer {
+    height: min(68vh, 70dvh);
+    max-height: 78dvh;
+    display: flex;
+    flex-direction: column;
+    /* keep the sheet clear of the home indicator on modern phones */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.16);
+  }
+  #sidebar-header { flex: 0 0 auto; }
+  /* the fields get the remaining height rather than a fixed sliver */
+  #detailsContainer {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 1rem;
+  }
+  /* make the drag affordance obvious — the sheet is resizable, but at 20px
+     of blank space nobody discovered it */
+  .sidebar-drag-handle {
+    flex: 0 0 auto;
+    position: relative;
+    touch-action: none;
+  }
+  .sidebar-drag-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--color-border);
+  }
+}
+
+/* --- touch targets and iOS zoom ------------------------------------------
+   Anything under ~44px is hard to hit with a thumb in the field, and iOS
+   Safari zooms the whole page when a font smaller than 16px takes focus. */
+@media (max-width: 600px) {
+  #detailsContainer input:not([type="checkbox"]):not([type="radio"]),
+  #detailsContainer select,
+  #detailsContainer textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #detailsContainer .fall-type-option {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  #detailsContainer input[type="checkbox"],
+  #detailsContainer input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+  .canvas-toolbar .btn { min-height: 44px; }
+}
+
+/* --- admin settings on a phone -------------------------------------------
+   Two problems: the options table is 500px wide inside a 274px column and was
+   being clipped outright (its Code and Delete columns unreachable), and the
+   scrolling content area was only 282px tall. The table now lives in
+   .option-table-wrapper, which scrolls horizontally. */
+@media (max-width: 768px) {
+  /* the settings panel was a 576px card floating in a 640px screen, leaving a
+     282px window to scroll 21,000px of settings through. On a phone it should
+     simply be the screen. */
+  /* the panel sits below the app header inside a padded #adminScreen, so a
+     flat 100dvh overhangs the bottom by exactly that offset. Drop the padding
+     and size against the header variable the app already maintains. */
+  /* Let the panel simply fill the space below the app header instead of
+     computing a height: the container also carries a margin, so any arithmetic
+     here overshoots by exactly that much. */
+  #adminScreen {
+    padding: 0;
+    box-sizing: border-box;
+    height: calc(100dvh - var(--header-h, 56px));
+    overflow: hidden;
+  }
+  #adminScreen .admin-container,
+  .admin-container {
+    box-sizing: border-box;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    /* both physical and logical, since the panel's own margin is set with
+       logical properties and a plain `margin` does not override those */
+    margin: 0;
+    margin-block: 0;
+    margin-inline: 0;
+    width: 100%;
+    max-width: none;
+  }
+  /* trim the chrome so the trimmings do not eat the content */
+  .admin-header { padding: 0.75rem 1rem; }
+  .admin-header h2 { font-size: 1.1rem; }
+
+  #adminScreenContent,
+  .admin-content {
+    max-height: none;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* header and tabs stay put while the settings scroll under them */
+  .admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--color-surface);
+  }
+  .admin-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-surface);
+  }
+  .option-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .option-table { min-width: 30rem; }
+  /* every control in settings reachable with a thumb */
+  .admin-section button,
+  .admin-group-toggle {
+    min-height: 44px;
+  }
+  .option-table input[type="text"] {
+    min-height: 40px;
+    font-size: 16px;
+  }
+  .option-table .btn-sm { min-height: 36px; }
+}
+
+/* ==========================================================================
+   Settings (ניהול) — modernised, 2026-08-28
+   --------------------------------------------------------------------------
+   The panel holds ~21,000px of options in one column. On a phone that was a
+   282px porthole; on a desktop it was a single narrow ribbon down the middle
+   of a 1200px card. Same content, laid out so it can actually be worked with.
+   ========================================================================== */
+
+/* group cards, on every size */
+#adminScreen .admin-group,
+#adminModal .admin-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  margin-bottom: 0.85rem;
+  overflow: hidden;
+}
+
+#adminScreen .admin-group-toggle,
+#adminModal .admin-group-toggle {
+  /* was phone-only; a 21,000px page needs collapsing on a desktop too */
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+}
+
+#adminScreen .admin-group-toggle:hover,
+#adminModal .admin-group-toggle:hover {
+  background: var(--color-bg);
+}
+
+#adminScreen .admin-group-toggle-header,
+#adminModal .admin-group-toggle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#adminScreen .admin-subtitle,
+#adminModal .admin-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  margin: 0;
+}
+
+#adminScreen .admin-group-content,
+#adminModal .admin-group-content {
+  padding: 0 1rem 1rem;
+}
+
+#adminScreen .admin-desc,
+#adminModal .admin-desc {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.6rem;
+}
+
+/* the options tables read as data, not as a wall of inputs */
+#adminScreen .option-table th,
+#adminModal .option-table th {
+  background: var(--color-bg);
+  font-weight: 700;
+  text-align: start;
+  padding: 0.5rem 0.6rem;
+  white-space: nowrap;
+}
+
+#adminScreen .option-table td,
+#adminModal .option-table td {
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--color-border);
+}
+
+#adminScreen .option-table input[type="text"],
+#adminModal .option-table input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+#adminScreen .option-table input:focus,
+#adminModal .option-table input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* the save bar stays reachable instead of living 21,000px down the page */
+#adminScreen .admin-actions,
+#adminModal .admin-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#adminScreen .admin-actions .btn,
+#adminModal .admin-actions .btn { min-height: 44px; }
+
+/* --- wide screens: use the width instead of one long ribbon -------------- */
+@media (min-width: 1000px) {
+  /* option groups sit side by side; the include/defaults groups stay full
+     width because their fields are already laid out in a grid */
+  #adminScreen .admin-section,
+  #adminModal .admin-section {
+    columns: 2;
+    column-gap: 1rem;
+  }
+  #adminScreen .admin-group,
+  #adminModal .admin-group {
+    break-inside: avoid;
+    display: inline-block;
+    width: 100%;
+  }
+  #adminScreen .admin-section-title,
+  #adminModal .admin-section-title {
+    column-span: all;
+  }
+}
+
+@media (min-width: 1400px) {
+  #adminScreen .admin-section,
+  #adminModal .admin-section { columns: 3; }
+}
+
+/* --- phone refinements --------------------------------------------------- */
+@media (max-width: 768px) {
+  #adminScreen .admin-group-content,
+  #adminModal .admin-group-content { padding: 0 0.75rem 0.85rem; }
+
+  #adminScreen .admin-group-toggle,
+  #adminModal .admin-group-toggle { padding: 0.75rem; min-height: 48px; }
+
+  /* the tabs are the main way around on a phone — make them obvious */
+  .admin-tabs .tab {
+    border-radius: 999px;
+    margin-inline-end: 6px;
+  }
+}
+
+/* help guide: the section chips deserve a full touch target */
+@media (max-width: 900px) {
+  .help-tab { min-height: 44px; }
+}

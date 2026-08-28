@@ -3806,10 +3806,16 @@ if (mobileSizeDecreaseBtn) {
   mobileSizeDecreaseBtn.addEventListener('click', decreaseSizeScale);
 }
 
-// Help modal controls
-if (helpBtn && helpModal) {
+// Help: the six-line shortcut dialog was replaced by the field guide. Loaded
+// on demand so its content and figures cost nothing until someone asks for it.
+if (helpBtn) {
   helpBtn.addEventListener('click', () => {
-    helpModal.style.display = 'flex';
+    import('../help/help-screen.js')
+      .then((m) => m.openHelp())
+      .catch((err) => {
+        console.warn('field guide failed to load', err);
+        if (helpModal) helpModal.style.display = 'flex';   // fall back to the old dialog
+      });
   });
 }
 if (closeHelpBtn && helpModal) {
