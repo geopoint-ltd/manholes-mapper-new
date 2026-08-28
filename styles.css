@@ -2640,84 +2640,6 @@ input.floating-keyboard-active {
    Corrections, 2026-08-28
    ========================================================================== */
 
-/* --- settings option rows on a phone -------------------------------------
-   Below 480px each row becomes a card with its column name printed above the
-   value. The generic table styling added earlier (cell padding, top borders,
-   a shared min-height on every button) worked against that: labels lost their
-   spacing and the delete button stretched to the full width of the card.
-   Restate the card layout so it wins, and give it a proper shape. */
-@media (max-width: 480px) {
-  #adminScreen .option-table td,
-  #adminModal .option-table td {
-    display: block;
-    padding: 0.35rem 0;
-    border-top: none;
-  }
-
-  #adminScreen .option-table tr,
-  #adminModal .option-table tr {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: 0.85rem;
-    margin-bottom: 0.6rem;
-  }
-
-  /* the column name above each value */
-  #adminScreen .option-table td::before,
-  #adminModal .option-table td::before {
-    content: attr(data-label);
-    display: block;
-    font-weight: 600;
-    color: var(--color-muted);
-    font-size: 0.8rem;
-    margin-bottom: 0.3rem;
-  }
-
-  /* "enabled" reads better as a checkbox beside its label than stacked */
-  #adminScreen .option-table .opt-enabled,
-  #adminModal .option-table .opt-enabled {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  #adminScreen .option-table .opt-enabled::before,
-  #adminModal .option-table .opt-enabled::before {
-    margin-bottom: 0;
-    order: 2;
-  }
-
-  /* delete is one action on one row — not a full-width banner */
-  #adminScreen .option-table .opt-actions,
-  #adminModal .option-table .opt-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 0.5rem;
-  }
-  #adminScreen .option-table .opt-actions::before,
-  #adminModal .option-table .opt-actions::before {
-    display: none;
-  }
-  #adminScreen .option-table .opt-actions button,
-  #adminModal .option-table .opt-actions button {
-    width: auto;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0 1rem;
-    border-radius: 10px;
-  }
-
-  #adminScreen .option-table .opt-label input[type="text"],
-  #adminModal .option-table .opt-label input[type="text"],
-  #adminScreen .option-table .opt-code input[type="text"],
-  #adminModal .option-table .opt-code input[type="text"] {
-    width: 100%;
-    min-width: 0;
-    min-height: 44px;
-    font-size: 16px;
-  }
-}
-
 /* --- field guide: keep selected text legible rather than grey-on-blue -----
    (the section-intro contrast itself is fixed in src/help/help.css, which
    loads after this file and would otherwise win) */
@@ -2726,25 +2648,199 @@ input.floating-keyboard-active {
   color: #fff;
 }
 
-/* The checkbox, code and delete columns were sized for a full-width table
-   (80/100/100px). Inside a multi-column settings layout that starves the label
-   column, which is the only one holding text worth reading. Give them what
-   they actually need and let the label take the rest. */
+/* Column sizing now comes from the grid tracks below — a fixed width on a grid
+   item overrides its track, which is what kept the label column narrow. */
+
+/* ==========================================================================
+   Settings option rows — one layout for every screen, 2026-08-28
+   --------------------------------------------------------------------------
+   These lists are the bulk of the settings screen: fourteen materials, fifteen
+   maintenance statuses, and so on. Each entry is only ever three small values
+   and a delete button, so it belongs on one line.
+
+   It used to be a real table on desktop and a stack of four labelled rows per
+   entry on a phone — around 200px of screen for one material, and a different
+   layout to reason about at each size. This is a single grid that holds at any
+   width: the header row and the entry rows share the same track sizes, so the
+   columns stay aligned and the header keeps doing the labelling.
+   ========================================================================== */
+
+#adminScreen .option-table,
+#adminModal .option-table,
+#adminScreen .option-table thead,
+#adminModal .option-table thead,
+#adminScreen .option-table tbody,
+#adminModal .option-table tbody {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+#adminScreen .option-table tr,
+#adminModal .option-table tr {
+  display: grid;
+  /* enabled · label (takes the rest) · code · delete */
+  grid-template-columns: 1.6rem minmax(0, 1fr) 3.75rem 2.25rem;
+  gap: 0.5rem;
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0.3rem 0;
+  margin: 0;
+}
+
+#adminScreen .option-table tbody tr,
+#adminModal .option-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+
+#adminScreen .option-table th,
+#adminScreen .option-table td,
+#adminModal .option-table th,
+#adminModal .option-table td {
+  display: block;
+  width: auto;
+  padding: 0;
+  border: 0;
+  text-align: start;
+  background: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#adminScreen .option-table th,
+#adminModal .option-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  padding-bottom: 0.3rem;
+}
+
+/* the header row labels the columns, so the per-cell labels are redundant */
+#adminScreen .option-table td::before,
+#adminModal .option-table td::before {
+  content: none;
+}
+
 #adminScreen .option-table .opt-enabled,
-#adminModal .option-table .opt-enabled { width: 52px; }
+#adminModal .option-table .opt-enabled {
+  display: flex;
+  justify-content: center;
+}
 
-#adminScreen .option-table .opt-code,
-#adminModal .option-table .opt-code { width: 68px; }
+#adminScreen .option-table input[type="checkbox"],
+#adminModal .option-table input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
 
-#adminScreen .option-table .opt-actions,
-#adminModal .option-table .opt-actions { width: 56px; }
+#adminScreen .option-table input[type="text"],
+#adminModal .option-table input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px; /* below 16px iOS zooms the page on focus */
+}
 
 #adminScreen .option-table .opt-code input[type="text"],
-#adminModal .option-table .opt-code input[type="text"] { width: 100%; }
+#adminModal .option-table .opt-code input[type="text"] {
+  text-align: center;
+  padding: 0 0.25rem;
+}
 
-#adminScreen .option-table .opt-actions .btn-sm,
-#adminModal .option-table .opt-actions .btn-sm {
-  width: 36px;
-  min-width: 36px;
+#adminScreen .option-table input[type="text"]:focus,
+#adminModal .option-table input[type="text"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* delete stays a quiet icon until it is wanted — it sits beside every row */
+#adminScreen .option-table .opt-actions .btn,
+#adminModal .option-table .opt-actions .btn {
+  width: 2.25rem;
+  min-width: 0;
+  height: 2.25rem;
+  min-height: 0;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+#adminScreen .option-table .opt-actions .btn:hover,
+#adminModal .option-table .opt-actions .btn:hover,
+#adminScreen .option-table .opt-actions .btn:focus-visible,
+#adminModal .option-table .opt-actions .btn:focus-visible {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #dc2626;
+  transform: none;
+}
+
+/* the row itself is 46px; the tap target extends over the whole row height */
+#adminScreen .option-table .opt-actions,
+#adminModal .option-table .opt-actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* no wrapper scrolling needed any more — nothing overflows */
+#adminScreen .option-table-wrapper,
+#adminModal .option-table-wrapper {
+  overflow-x: visible;
+  border: 0;
+}
+
+/* a little more room for the label once there is space for it */
+@media (min-width: 560px) {
+  #adminScreen .option-table tr,
+  #adminModal .option-table tr {
+    grid-template-columns: 2rem minmax(0, 1fr) 4.5rem 2.5rem;
+    gap: 0.6rem;
+  }
+}
+
+/* On a narrow screen the option rows sit inside four nested paddings — the
+   content area, the group card, the group body, and the wrapper's old
+   pull-out/pad-back trick from when the table scrolled sideways. Together they
+   took 88px of a 390px screen away from the only column with text in it.
+   Nothing scrolls sideways any more, so reclaim it. */
+@media (max-width: 560px) {
+  #adminScreen .option-table-wrapper,
+  #adminModal .option-table-wrapper {
+    margin: 0;
+    padding: 0;
+  }
+
+  #adminScreen .admin-group,
+  #adminModal .admin-group { padding: 0; }
+
+  #adminScreen .admin-group-content,
+  #adminModal .admin-group-content { padding: 0 0.6rem 0.7rem; }
+
+  #adminScreen .admin-group-toggle,
+  #adminModal .admin-group-toggle { padding: 0.7rem 0.6rem; }
+
+  #adminScreenContent,
+  #adminModal .admin-content { padding-inline: 0.6rem; }
 }
