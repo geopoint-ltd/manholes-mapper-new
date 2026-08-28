@@ -1,0 +1,79 @@
+# Live preview URL for every pull request.
+#
+# GitHub Pages serves one site per repo, so a branch cannot be looked at until
+# it is on main — which is how a change reached main before anyone had seen it
+# running. Firebase Hosting preview channels give each PR its own temporary URL
+# instead, the way Vercel previews work.
+#
+# Inert until two things exist:
+#   1. a Firebase project, with its id in `projectId` below and in .firebaserc
+#   2. a FIREBASE_SERVICE_ACCOUNT repository secret
+# Without the secret the deploy step is skipped rather than failing, so this
+# file is safe to merge before the project is set up.
+name: Firebase preview
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: firebase-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    # Secrets are not exposed to pull requests from forks; there is nothing to
+    # deploy with, so skip rather than fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the service account is configured
+        id: guard
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "### Firebase preview skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "No FIREBASE_SERVICE_ACCOUNT secret is set yet, so there is nowhere to deploy." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to a preview channel
+        id: deploy
+        if: steps.guard.outputs.ready == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: REPLACE-WITH-YOUR-FIREBASE-PROJECT-ID
+          expires: 7d
+
+      # This org pins workflow tokens to read-only, which can stop the action
+      # from posting its PR comment. The URL is written to the run summary too,
+      # so it is still reachable when the comment does not appear.
+      - name: Put the preview URL in the run summary
+        if: steps.deploy.outputs.details_url != ''
+        run: |
+          echo "### Preview for this PR" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.deploy.outputs.details_url }}" >> "$GITHUB_STEP_SUMMARY"

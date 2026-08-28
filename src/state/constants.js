@@ -178,11 +178,14 @@ export const EDGE_MATERIAL_OPTIONS = [
 
 // Fall type (FallType / סוג מפל). Replaces the earlier fall_position field;
 // its two values map onto 2 (external) and 3 (internal) here.
+// Labels drop the word מפל: the field is already titled "סוג מפל", so repeating
+// it in every option only made the chips wide enough to wrap on a phone. The
+// codes are what the CSV carries, so this is presentation only.
 export const EDGE_FALL_TYPE_OPTIONS = [
   { code: 0, label: 'לא ידוע' },
   { code: 1, label: 'ירידה חופשית' },
-  { code: 2, label: 'מפל חיצוני' },
-  { code: 3, label: 'מפל פנימי' },
+  { code: 2, label: 'חיצוני' },
+  { code: 3, label: 'פנימי' },
 ];
 
 export const EDGE_LINE_DIAMETERS = [

@@ -351,21 +351,24 @@ const defaultAdminConfig = {
 };
 
 /**
- * Force the line-type list back to the built-in one.
+ * Force the option lists the code owns back to their built-in values.
  *
  * The stored settings blob replaces `edges` wholesale, so a device that saved
- * settings under an older build still carries the three-entry list — including
- * קו סניקה, and the codes 4802/4803 the wrong way round. Those codes are the
- * geodatabase domain LineSubType_1, not a preference, so a stale saved copy
- * would quietly export pipes under the wrong subtype. This list is owned by the
- * code; anything a device saved for it is discarded.
+ * settings under an older build still carries that build's lists.
+ *
+ * For edge_type that is a correctness problem: the codes are the geodatabase
+ * domain LineSubType_1, not a preference, and the stale copy has 4802/4803 the
+ * wrong way round plus the retired קו סניקה — it would quietly export pipes
+ * under the wrong subtype. For fall_type it is a cosmetic one: the stale copy
+ * still spells the options "מפל חיצוני"/"מפל פנימי". Either way the device's
+ * saved copy of these two lists is discarded.
  */
-function normalizeEdgeTypeConfig(cfg) {
+function normalizeCodeOwnedOptions(cfg) {
   if (!cfg || !cfg.edges) return;
   cfg.edges.options = cfg.edges.options || {};
-  cfg.edges.options.edge_type = EDGE_TYPE_OPTIONS.map(
-    (o) => ({ code: o.code, label: o.label, enabled: true })
-  );
+  const own = (list) => list.map((o) => ({ code: o.code, label: o.label, enabled: true }));
+  cfg.edges.options.edge_type = own(EDGE_TYPE_OPTIONS);
+  cfg.edges.options.fall_type = own(EDGE_FALL_TYPE_OPTIONS);
   cfg.edges.defaults = cfg.edges.defaults || {};
   if (!EDGE_TYPES.includes(cfg.edges.defaults.edge_type)) {
     cfg.edges.defaults.edge_type = EDGE_TYPES[0];
@@ -390,7 +393,7 @@ let adminConfig = (() => {
     merged.edges.defaults = merged.edges.defaults || {};
     // Undo labels that an earlier settings save truncated at an embedded quote
     repairTruncatedAdminLabels(merged);
-    normalizeEdgeTypeConfig(merged);
+    normalizeCodeOwnedOptions(merged);
     return merged;
   } catch (e) {
     console.warn('Failed to load admin config; using defaults', e);
