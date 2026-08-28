@@ -71,38 +71,11 @@ export function buildOptionsEditorModal(adminConfig, t, title, cfgKey, specs) {
   `;
   body.appendChild(defaultsDiv);
 
-  const optsWrap = document.createElement('div');
-  optsWrap.className = 'admin-group';
-  optsWrap.innerHTML = specs.filter(s => s.optionsKey).map(spec => {
-    const opts = adminConfig[cfgKey].options[spec.optionsKey] || [];
-    const rows = opts.map((o) => `<tr>
-      <td class="opt-enabled" data-label="${t('admin.thEnabled')}"><input type="checkbox" ${o.enabled!==false?'checked':''} data-opt-enabled="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${escapeHtml(o.label)}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${escapeHtml(o.code)}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-actions" data-label="${t('admin.delete')}"><button class="btn btn-danger btn-sm" title="${t('admin.delete')}" aria-label="${t('admin.delete')}" data-opt-del="${cfgKey}:${spec.optionsKey}">×</button></td>
-    </tr>`).join('');
-    return `
-      <button type="button" class="admin-group-toggle" aria-expanded="true">
-        <div class="admin-group-toggle-header">
-          <div class="admin-subtitle">${t('admin.optionsTitle', spec.label)}</div>
-          <span class="material-icons admin-group-toggle-icon">expand_more</span>
-        </div>
-      </button>
-      <div class="admin-group-content">
-        <div class="field">
-          <div class="admin-desc">${t('admin.optionsDesc')}</div>
-          <div class="option-table-wrapper">
-          <table class="option-table" style="width:100%;">
-            <thead><tr><th class="opt-enabled">${t('admin.thEnabled')}</th><th class="opt-label">${t('admin.thLabel')}</th><th class="opt-code">${t('admin.thCode')}</th><th class="opt-actions"></th></tr></thead>
-            <tbody data-opt-body="${cfgKey}:${spec.optionsKey}">${rows}</tbody>
-          </table>
-          </div>
-          <div style="margin-top:6px;"><button class="btn" data-opt-add="${cfgKey}:${spec.optionsKey}">${t('admin.addOption')}</button></div>
-        </div>
-      </div>
-    `;
-  }).join('');
-  body.appendChild(optsWrap);
+  // The option lists (אפשרויות – חומר מכסה, רמת דיוק, …) are no longer editable
+  // here. Their codes have to match the geodatabase domains exactly, and an
+  // accidental edit silently corrupted them once already. The values still come
+  // from adminConfig, so anything a site had saved keeps working — only the
+  // editing UI is gone. Preserved on branch archive/settings-options-editor.
 
   section.appendChild(body);
   return section;
@@ -171,38 +144,11 @@ export function buildOptionsEditorScreen(adminConfig, t, title, cfgKey, specs) {
   `;
   section.appendChild(defaultsDiv);
 
-  const optsWrap = document.createElement('div');
-  optsWrap.className = 'admin-group';
-  optsWrap.innerHTML = specs.filter(s => s.optionsKey).map(spec => {
-    const opts = adminConfig[cfgKey].options[spec.optionsKey] || [];
-    const rows = opts.map((o) => `<tr>
-      <td class="opt-enabled" data-label="${t('admin.thEnabled')}"><input type="checkbox" ${o.enabled!==false?'checked':''} data-opt-enabled="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-label" data-label="${t('admin.thLabel')}"><input type="text" value="${escapeHtml(o.label)}" data-opt-label="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-code" data-label="${t('admin.thCode')}"><input type="text" value="${escapeHtml(o.code)}" data-opt-code="${cfgKey}:${spec.optionsKey}"/></td>
-      <td class="opt-actions" data-label="${t('admin.delete')}"><button class="btn btn-danger btn-sm" title="${t('admin.delete')}" aria-label="${t('admin.delete')}" data-opt-del="${cfgKey}:${spec.optionsKey}">×</button></td>
-    </tr>`).join('');
-    return `
-      <button type="button" class="admin-group-toggle" aria-expanded="true">
-        <div class="admin-group-toggle-header">
-          <div class="admin-subtitle">${t('admin.optionsTitle', spec.label)}</div>
-          <span class="material-icons admin-group-toggle-icon">expand_more</span>
-        </div>
-      </button>
-      <div class="admin-group-content">
-        <div class="field">
-          <div class="admin-desc">${t('admin.optionsDesc')}</div>
-          <div class="option-table-wrapper">
-          <table class="option-table" style="width:100%;">
-            <thead><tr><th class="opt-enabled">${t('admin.thEnabled')}</th><th class="opt-label">${t('admin.thLabel')}</th><th class="opt-code">${t('admin.thCode')}</th><th class="opt-actions"></th></tr></thead>
-            <tbody data-opt-body="${cfgKey}:${spec.optionsKey}">${rows}</tbody>
-          </table>
-          </div>
-          <div style="margin-top:6px;"><button class="btn" data-opt-add="${cfgKey}:${spec.optionsKey}">${t('admin.addOption')}</button></div>
-        </div>
-      </div>
-    `;
-  }).join('');
-  section.appendChild(optsWrap);
+  // The option lists (אפשרויות – חומר מכסה, רמת דיוק, …) are no longer editable
+  // here. Their codes have to match the geodatabase domains exactly, and an
+  // accidental edit silently corrupted them once already. The values still come
+  // from adminConfig, so anything a site had saved keeps working — only the
+  // editing UI is gone. Preserved on branch archive/settings-options-editor.
 
   return section;
 }
