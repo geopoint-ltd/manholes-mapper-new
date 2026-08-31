@@ -76,11 +76,9 @@ const toastEl = document.getElementById('toast');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const recenterBtn = document.getElementById('recenterBtn');
-const rotateLeftBtn = document.getElementById('rotateLeftBtn');
-const rotateRightBtn = document.getElementById('rotateRightBtn');
+const rotationSlider = document.getElementById('rotationSlider');
+const rotationValue = document.getElementById('rotationValue');
 const flipHorizontalBtn = document.getElementById('flipHorizontalBtn');
-const flipVerticalBtn = document.getElementById('flipVerticalBtn');
-const resetOrientationBtn = document.getElementById('resetOrientationBtn');
 const sizeIncreaseBtn = document.getElementById('sizeIncreaseBtn');
 const sizeDecreaseBtn = document.getElementById('sizeDecreaseBtn');
 const appTitleEl = document.getElementById('appTitle');
@@ -1060,11 +1058,8 @@ function applyLangToStaticUI() {
     edgeSecondaryModeBtn.title = t('modeEdgeSecondary');
     edgeSecondaryModeBtn.setAttribute('aria-label', t('modeEdgeSecondary'));
   }
-  if (rotateLeftBtn) { rotateLeftBtn.title = t('rotateLeft'); rotateLeftBtn.setAttribute('aria-label', t('rotateLeft')); }
-  if (rotateRightBtn) { rotateRightBtn.title = t('rotateRight'); rotateRightBtn.setAttribute('aria-label', t('rotateRight')); }
+  if (rotationSlider) { rotationSlider.title = t('rotation'); rotationSlider.setAttribute('aria-label', t('rotation')); }
   if (flipHorizontalBtn) { flipHorizontalBtn.title = t('flipHorizontal'); flipHorizontalBtn.setAttribute('aria-label', t('flipHorizontal')); }
-  if (flipVerticalBtn) { flipVerticalBtn.title = t('flipVertical'); flipVerticalBtn.setAttribute('aria-label', t('flipVertical')); }
-  if (resetOrientationBtn) { resetOrientationBtn.title = t('resetOrientation'); resetOrientationBtn.setAttribute('aria-label', t('resetOrientation')); }
   if (zoomInBtn) { zoomInBtn.title = t('zoomIn'); }
   if (zoomOutBtn) { zoomOutBtn.title = t('zoomOut'); }
   if (sizeIncreaseBtn) { sizeIncreaseBtn.title = t('sizeIncrease'); }
@@ -4314,53 +4309,45 @@ if (recenterBtn) {
 }
 
 /**
- * Turn or mirror the drawing.
+ * Reflect the current orientation in the controls.
  *
- * Recentres afterwards so the sketch stays framed rather than swinging off
- * screen, and marks the buttons while the view is not at its drawn orientation
- * — otherwise a surveyor who rotated an hour ago has no way to tell.
+ * The slider is the readout as well as the input, so it has to be written back
+ * whenever the angle changes from anywhere other than the slider itself.
  */
-function applyOrientation(change, message) {
-  change();
-  try { recenterView(); } catch (_) { scheduleDraw(); }
-  updateOrientationButtons();
-  // Read the orientation AFTER the change: passing the text in as an argument
-  // reported the state the sketch had a moment ago.
-  showToast(message || orientationToast());
-}
-
-function updateOrientationButtons() {
-  const active = sketchView.isReoriented();
-  [rotateLeftBtn, rotateRightBtn, flipHorizontalBtn, flipVerticalBtn].forEach((b) => {
-    if (b) b.classList.toggle('active', active);
-  });
-  if (resetOrientationBtn) resetOrientationBtn.disabled = !active;
-}
-
-function orientationToast() {
+function updateOrientationControls() {
   const o = sketchView.getOrientation();
-  return t('toasts.orientation', o.degrees, o.flipped);
+  if (rotationValue) rotationValue.textContent = `${Math.round(o.degrees)}\u00B0`;
+  if (rotationSlider && Number(rotationSlider.value) !== Math.round(o.degrees)) {
+    rotationSlider.value = String(Math.round(o.degrees));
+  }
+  if (flipHorizontalBtn) flipHorizontalBtn.classList.toggle('active', o.flipped);
+  if (orientationGroupEl) orientationGroupEl.classList.toggle('is-reoriented', sketchView.isReoriented());
 }
 
-if (rotateLeftBtn) {
-  rotateLeftBtn.addEventListener('click', () =>
-    applyOrientation(sketchView.rotateLeft));
+const orientationGroupEl = document.getElementById('orientationGroup');
+
+if (rotationSlider) {
+  // 'input' rather than 'change': the drawing follows the handle as it moves,
+  // which is the whole point of a free angle — you aim it by eye.
+  rotationSlider.addEventListener('input', () => {
+    sketchView.setRotation(Number(rotationSlider.value));
+    updateOrientationControls();
+    // Recentre while dragging would fight the handle, so only redraw here.
+    scheduleDraw();
+  });
+  // Framing is corrected once, when the handle is let go.
+  const settle = () => { try { recenterView(); } catch (_) { scheduleDraw(); } };
+  rotationSlider.addEventListener('change', settle);
+  rotationSlider.addEventListener('pointerup', settle);
 }
-if (rotateRightBtn) {
-  rotateRightBtn.addEventListener('click', () =>
-    applyOrientation(sketchView.rotateRight));
-}
+
 if (flipHorizontalBtn) {
-  flipHorizontalBtn.addEventListener('click', () =>
-    applyOrientation(sketchView.flipHorizontal));
-}
-if (flipVerticalBtn) {
-  flipVerticalBtn.addEventListener('click', () =>
-    applyOrientation(sketchView.flipVertical));
-}
-if (resetOrientationBtn) {
-  resetOrientationBtn.addEventListener('click', () =>
-    applyOrientation(sketchView.resetOrientation, t('toasts.orientationReset')));
+  flipHorizontalBtn.addEventListener('click', () => {
+    sketchView.flipHorizontal();
+    updateOrientationControls();
+    try { recenterView(); } catch (_) { scheduleDraw(); }
+    showToast(t('toasts.orientationFlip', sketchView.getOrientation().flipped));
+  });
 }
 
 /**
@@ -4477,7 +4464,7 @@ async function init() {
   }
   // Default interaction mode is node creation
   setMode('node');
-  updateOrientationButtons();
+  updateOrientationControls();
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
   renderDetails();
