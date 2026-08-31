@@ -16,6 +16,7 @@
 // the network was unavailable and there was no cached response, causing
 // offline pages to break.  Increasing the version here forces browsers
 // to pick up the updated logic.
+// v23 (2026-08-30): קו ראשי drawn in red.
 // v22 (2026-08-30): direction arrow made legible.
 // v21 (2026-08-30): direction-point node type; desktop details panel full height.
 // v20 (2026-08-30): zoom anchors in display space again.
@@ -31,7 +32,7 @@
 // new worker calls skipWaiting() then clients.claim(), and register-sw.js
 // reloads the page on controllerchange. So every open device reloads within
 // ~15 minutes of the deploy, unprompted.
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

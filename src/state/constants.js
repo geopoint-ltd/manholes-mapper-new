@@ -28,7 +28,7 @@ const COLORS_LIGHT = {
     badgeIcon: '#ffffff',     // white (badge icon)
   },
   edge: {
-    typePrimary: '#2563eb',   // blue-600 (קו ראשי)
+    typePrimary: '#dc2626',   // red-600 (קו ראשי)
     typeSecondary: '#0d9488', // teal-600 (קו משני)
     selected: '#7c3aed',      // violet-600
     preview: '#94a3b8',       // slate-400
@@ -64,7 +64,7 @@ const COLORS_DARK = {
     badgeIcon: '#f0fdf4',     // green-50 (light badge icon for dark mode)
   },
   edge: {
-    typePrimary: '#60a5fa',   // blue-400 (קו ראשי — lighter for dark mode)
+    typePrimary: '#f87171',   // red-400 (קו ראשי — lighter for dark mode)
     typeSecondary: '#2dd4bf', // teal-400 (קו משני — lighter for dark mode)
     selected: '#a78bfa',      // violet-400 (lighter for dark mode)
     preview: '#94a3b8',       // slate-400
