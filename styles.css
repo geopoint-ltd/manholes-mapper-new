@@ -699,9 +699,24 @@ canvas { width: 100%; height: 100%; display: block; }
   margin-bottom: 0.5rem;
 }
 #detailsContainer {
-  flex: 1;
+  /* min-height:0 is what lets a flex child actually shrink and scroll; without
+     it the container grows to its content and the panel reads as "too short"
+     because the fields overflow instead of scrolling. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+@media (min-width: 601px) {
+  /* The side panel is a full-height column. Height comes from the layout, not
+     from a value saved by the phone bottom sheet. */
+  #sidebar.drawer {
+    height: auto;
+    max-height: none;
+    align-self: stretch;
+  }
+  /* The drag handle belongs to the bottom sheet. */
+  #sidebar .sidebar-drag-handle { display: none; }
 }
 .icon-btn {
   display: inline-flex;

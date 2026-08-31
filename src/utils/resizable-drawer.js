@@ -20,6 +20,9 @@ export function initResizableDrawer() {
   }
 
   function startResize(e) {
+    // Dragging the handle is a bottom-sheet gesture; on desktop the panel is
+    // sized by the layout and there is nothing to drag.
+    if (!isSheet()) return;
     isResizing = true;
     startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     
@@ -104,10 +107,23 @@ export function initResizableDrawer() {
   document.addEventListener('touchmove', resize, { passive: false });
   document.addEventListener('touchend', stopResize);
 
+  // The drag handle is the phone bottom-sheet affordance. On a wide screen the
+  // sidebar is a full-height column, so a height saved on a phone must not be
+  // pinned onto it — that is what left the details panel a few hundred pixels
+  // tall on desktop with the fields scrolling inside a sliver.
+  const isSheet = () => window.innerWidth <= 600;
+
+  /** Drop any inline sizing so the desktop column can fill its flex parent. */
+  function clearSheetSizing() {
+    sidebar.style.height = '';
+    sidebar.style.maxHeight = '';
+    document.documentElement.style.setProperty('--drawer-height', '0px');
+  }
+
   // Restore saved height on load
   try {
     const savedHeight = localStorage.getItem('sidebarHeight');
-    if (savedHeight && sidebar.classList.contains('open')) {
+    if (savedHeight && sidebar.classList.contains('open') && isSheet()) {
       const height = parseInt(savedHeight, 10);
       if (height >= minHeight && height <= getMaxHeight()) {
         sidebar.style.height = `${height}px`;
@@ -121,16 +137,35 @@ export function initResizableDrawer() {
     // Ignore localStorage errors
   }
   
+  if (!isSheet()) clearSheetSizing();
+
   // Set initial height variable for buttons
-  if (sidebar.classList.contains('open')) {
+  if (sidebar.classList.contains('open') && isSheet()) {
     updateDrawerHeightVariable(sidebar.offsetHeight);
   }
+
+  // Crossing the breakpoint either way has to take the sizing with it,
+  // otherwise widening the window leaves the desktop panel phone-sized.
+  window.addEventListener('resize', () => {
+    if (!isSheet()) {
+      clearSheetSizing();
+      return;
+    }
+    if (sidebar.classList.contains('open')) {
+      updateDrawerHeightVariable(sidebar.offsetHeight);
+    }
+  });
 
   // Reset height when sidebar is opened/closed
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       if (mutation.attributeName === 'class') {
-        if (sidebar.classList.contains('open')) {
+        if (sidebar.classList.contains('open') && !isSheet()) {
+          // Desktop: the column is sized by the layout. Re-applying a height
+          // saved by the phone sheet here is what pinned the details panel a
+          // few hundred pixels tall however wide the window was.
+          clearSheetSizing();
+        } else if (sidebar.classList.contains('open')) {
           // Restore saved height when opening
           try {
             const savedHeight = localStorage.getItem('sidebarHeight');

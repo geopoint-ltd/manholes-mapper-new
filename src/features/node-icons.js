@@ -220,6 +220,48 @@ export function drawHomeIcon(ctx, x, y, radius, colors, isSelected, fillColor) {
  * @param {Object} colors - Color palette
  * @param {Object} selectedNode - Currently selected node
  */
+/**
+ * A direction point: the manhole circle with an arrow through it, pointing the
+ * way the line continues. Drawn instead of the crosshatch so it reads as
+ * "this is not a manhole you can open" at a glance.
+ */
+export function drawDirectionIcon(ctx, x, y, radius, colors, isSelected, fillColor) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = colors.node.stroke;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const ink = isSelected ? '#ffffff' : colors.node.label;
+  const a = radius * 0.62;   // half-length of the shaft
+  const head = radius * 0.42;
+  ctx.strokeStyle = ink;
+  ctx.fillStyle = ink;
+  ctx.lineWidth = Math.max(1.5, radius * 0.13);
+  ctx.lineCap = 'round';
+  // Shaft, pointing up-right so it cannot be mistaken for the crosshatch.
+  const dx = Math.cos(-Math.PI / 4);
+  const dy = Math.sin(-Math.PI / 4);
+  ctx.beginPath();
+  ctx.moveTo(x - dx * a, y - dy * a);
+  ctx.lineTo(x + dx * a * 0.45, y + dy * a * 0.45);
+  ctx.stroke();
+  // Head
+  const tipX = x + dx * a;
+  const tipY = y + dy * a;
+  const ang = Math.atan2(dy, dx);
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(tipX - head * Math.cos(ang - Math.PI / 7), tipY - head * Math.sin(ang - Math.PI / 7));
+  ctx.lineTo(tipX - head * Math.cos(ang + Math.PI / 7), tipY - head * Math.sin(ang + Math.PI / 7));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawNodeIcon(ctx, node, radius, colors, selectedNode) {
   const isSelected = node === selectedNode;
   
@@ -237,6 +279,10 @@ export function drawNodeIcon(ctx, node, radius, colors, selectedNode) {
     fillColor = node.type === 'type2' ? colors.node.fillMissing : '#0ea5e9';
   } else if (node.nodeType === 'Covered' || node.nodeType === 'שוחה מכוסה') {
     fillColor = colors.node.fillBlocked;
+  } else if (node.nodeType === 'Direction') {
+    // Never the "missing measurement" orange: a direction point is not supposed
+    // to have measurements, so flagging it as incomplete would be noise.
+    fillColor = colors.node.fillBlocked;
   } else {
     fillColor = node.type === 'type2' ? colors.node.fillMissing : colors.node.fillDefault;
   }
@@ -248,6 +294,8 @@ export function drawNodeIcon(ctx, node, radius, colors, selectedNode) {
     drawDrainageIcon(ctx, node.x, node.y, radius, colors, isSelected, fillColor);
   } else if (node.nodeType === 'Covered' || node.nodeType === 'שוחה מכוסה') {
     drawCoveredIcon(ctx, node.x, node.y, radius, colors, isSelected, fillColor);
+  } else if (node.nodeType === 'Direction') {
+    drawDirectionIcon(ctx, node.x, node.y, radius, colors, isSelected, fillColor);
   } else {
     // Default manhole icon
     drawManholeIcon(ctx, node.x, node.y, radius, colors, isSelected, fillColor);
