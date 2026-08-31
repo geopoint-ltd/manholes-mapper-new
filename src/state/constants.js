@@ -15,6 +15,8 @@ const COLORS_LIGHT = {
     fillMissing: '#fb923c',   // orange-400 (more orange)
     fillSelectedMissing: '#fed7aa', // orange-200 (richer than 100)
     fillBlocked: '#cbd5e1',   // slate-300
+    fillDirection: '#475569', // slate-600 (נקודת כיוון — dark, so the arrow reads)
+    directionInk: '#ffffff',  // the arrow itself
     fillSelected: '#bfdbfe',  // blue-200 (richer than 100)
     fillDrainageComplete: '#0ea5e9', // sky-500 (drainage node when complete)
     stroke: '#2563eb',        // blue-600
@@ -49,6 +51,8 @@ const COLORS_DARK = {
     fillMissing: '#fb923c',   // orange-400
     fillSelectedMissing: '#fed7aa', // orange-200
     fillBlocked: '#475569',   // slate-600 (darker for dark mode)
+    fillDirection: '#94a3b8', // slate-400 (נקודת כיוון — light, against the dark canvas)
+    directionInk: '#0f172a',  // the arrow itself
     fillSelected: '#3b82f6',  // blue-500 (more vibrant for dark mode)
     fillDrainageComplete: '#38bdf8', // sky-400 (brighter drainage node for dark mode)
     stroke: '#60a5fa',        // blue-400 (lighter stroke for dark mode)

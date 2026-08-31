@@ -235,12 +235,14 @@ export function drawDirectionIcon(ctx, x, y, radius, colors, isSelected, fillCol
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  const ink = isSelected ? '#ffffff' : colors.node.label;
-  const a = radius * 0.62;   // half-length of the shaft
-  const head = radius * 0.42;
+  // Sized to be legible at arm's length: the first cut drew a 2.6px line in the
+  // label colour over a pale fill, which was technically present and no use.
+  const ink = colors.node.directionInk;
+  const a = radius * 0.74;   // half-length of the shaft
+  const head = radius * 0.56;
   ctx.strokeStyle = ink;
   ctx.fillStyle = ink;
-  ctx.lineWidth = Math.max(1.5, radius * 0.13);
+  ctx.lineWidth = Math.max(2.5, radius * 0.2);
   ctx.lineCap = 'round';
   // Shaft, pointing up-right so it cannot be mistaken for the crosshatch.
   const dx = Math.cos(-Math.PI / 4);
@@ -281,8 +283,10 @@ export function drawNodeIcon(ctx, node, radius, colors, selectedNode) {
     fillColor = colors.node.fillBlocked;
   } else if (node.nodeType === 'Direction') {
     // Never the "missing measurement" orange: a direction point is not supposed
-    // to have measurements, so flagging it as incomplete would be noise.
-    fillColor = colors.node.fillBlocked;
+    // to have measurements, so flagging it as incomplete would be noise. Its own
+    // fill rather than the covered-manhole grey, which sat too close to the page
+    // for the arrow inside it to be seen.
+    fillColor = colors.node.fillDirection;
   } else {
     fillColor = node.type === 'type2' ? colors.node.fillMissing : colors.node.fillDefault;
   }
