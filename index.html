@@ -236,6 +236,26 @@
             <button id="edgeModeBtn" class="btn mode-edge mode-edge-primary" title=""></button>
             <button id="edgeSecondaryModeBtn" class="btn mode-edge mode-edge-secondary" title=""></button>
           </div>
+          <!-- Turning the sketch is a desktop convenience: on a phone the screen
+               is too small to gain from it and the buttons would crowd the
+               drawing, so CSS hides this group below the desktop breakpoint. -->
+          <div class="segmented orientation-group" id="orientationGroup">
+            <button id="rotateLeftBtn" class="btn" title="">
+              <span class="material-icons" aria-hidden="true">rotate_left</span>
+            </button>
+            <button id="rotateRightBtn" class="btn" title="">
+              <span class="material-icons" aria-hidden="true">rotate_right</span>
+            </button>
+            <button id="flipHorizontalBtn" class="btn" title="">
+              <span class="material-icons" aria-hidden="true">swap_horiz</span>
+            </button>
+            <button id="flipVerticalBtn" class="btn" title="">
+              <span class="material-icons" aria-hidden="true">swap_vert</span>
+            </button>
+            <button id="resetOrientationBtn" class="btn" title="">
+              <span class="material-icons" aria-hidden="true">restart_alt</span>
+            </button>
+          </div>
         </div>
         <div id="toast"></div>
         <!-- Edge type legend -->
