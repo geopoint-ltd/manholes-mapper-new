@@ -16,6 +16,9 @@
 // the network was unavailable and there was no cached response, causing
 // offline pages to break.  Increasing the version here forces browsers
 // to pick up the updated logic.
+// v18 (2026-08-30): sketch rotate/mirror. main.js and styles.css are served
+// stale-while-revalidate from a cache keyed by this constant, so a release that
+// changes only them reaches nobody until it is bumped.
 // v17 (2026-08-28): field guide scrolls properly again.
 // v16 (2026-08-28): line-type radios + selection highlight.
 // v15 (2026-08-28): bumped to ship the two line types / DB domain fix to field
@@ -24,7 +27,7 @@
 // new worker calls skipWaiting() then clients.claim(), and register-sw.js
 // reloads the page on controllerchange. So every open device reloads within
 // ~15 minutes of the deploy, unprompted.
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
