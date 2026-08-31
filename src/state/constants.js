@@ -90,7 +90,27 @@ export const NODE_TYPES = ['type1', 'type2'];
 export const NODE_TYPE_OPTIONS = [
   { value: 'Manhole', i18nKey: 'modeNode' },
   { value: 'Home', i18nKey: 'modeHome' },
+  { value: 'Direction', i18nKey: 'modeDirection' },
 ];
+
+/**
+ * What the כיוון button fills in.
+ *
+ * A direction point is not a surveyed manhole: it exists to show that the line
+ * carries on past the edge of today's work. רמת דיוק must therefore be
+ * סכימטית — left at הנדסית it loads as a real manhole with a precise position
+ * nobody measured, which is one of the two mistakes the field guide calls out.
+ * Everything else is "not known", because nobody looked.
+ */
+export const DIRECTION_NODE_DEFAULTS = {
+  note: 'כיוון',
+  accuracyLevel: 5,      // סכימטית
+  maintenanceStatus: 0,  // לא ידוע
+  material: 'לא ידוע',
+  manholeMaterial: 'לא ידוע',
+  access: 0,             // לא ידוע
+  coverDiameter: '',
+};
 
 export const NODE_MATERIAL_OPTIONS = [
   { code: 0, label: 'לא ידוע' },

@@ -50,6 +50,7 @@ const newSketchBtn = document.getElementById('newSketchBtn');
 const homeBtn = document.getElementById('homeBtn');
 const nodeModeBtn = document.getElementById('nodeModeBtn');
 const homeNodeModeBtn = document.getElementById('homeNodeModeBtn');
+const directionModeBtn = document.getElementById('directionModeBtn');
 const edgeModeBtn = document.getElementById('edgeModeBtn');
 const edgeSecondaryModeBtn = document.getElementById('edgeSecondaryModeBtn');
 // Separate export buttons for nodes and edges
@@ -249,6 +250,7 @@ import {
   COLORS,
   NODE_TYPES,
   NODE_TYPE_OPTIONS,
+  DIRECTION_NODE_DEFAULTS,
   NODE_MATERIAL_OPTIONS,
   NODE_COVER_DIAMETERS,
   NODE_ACCESS_OPTIONS,
@@ -1044,6 +1046,12 @@ function applyLangToStaticUI() {
     homeNodeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">home</span>';
     homeNodeModeBtn.title = t('modeHome');
     homeNodeModeBtn.setAttribute('aria-label', t('modeHome'));
+  }
+  if (directionModeBtn) {
+    // A circle with a needle in it — the same idea as the icon on the canvas.
+    directionModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">explore</span>';
+    directionModeBtn.title = t('modeDirection');
+    directionModeBtn.setAttribute('aria-label', t('modeDirection'));
   }
   // Each line button draws the pipe it creates, in that type's colour, instead
   // of a shared icon — the colour is the only thing that distinguishes them,
@@ -1946,8 +1954,9 @@ function setMode(mode, options = {}) {
   // armed — otherwise the surveyor cannot tell which line they are about to draw.
   const activeBtn = mode === 'node' ? nodeModeBtn
     : mode === 'home' ? homeNodeModeBtn
-      : (currentEdgeType === EDGE_TYPES[1] ? edgeSecondaryModeBtn : edgeModeBtn);
-  [nodeModeBtn, homeNodeModeBtn, edgeModeBtn, edgeSecondaryModeBtn].forEach((btn) => {
+      : mode === 'direction' ? directionModeBtn
+        : (currentEdgeType === EDGE_TYPES[1] ? edgeSecondaryModeBtn : edgeModeBtn);
+  [nodeModeBtn, homeNodeModeBtn, directionModeBtn, edgeModeBtn, edgeSecondaryModeBtn].forEach((btn) => {
     if (btn) btn.classList.toggle('active', btn === activeBtn);
   });
 
@@ -2173,6 +2182,22 @@ function drawEdgeLabels(edge) {
   ctx.restore();
 }
 
+/**
+ * Turn a freshly created node into a direction point.
+ *
+ * The whole value of the button is that these five fields are already right by
+ * the time the surveyor looks at the node: a כיוון point is schematic, has
+ * nothing known about it, and is identified downstream by the word in its note.
+ * The note is only seeded — it is ordinary free text afterwards, so
+ * "כיוון - מדדתי בתאריך ..." works without fighting anything.
+ */
+function applyDirectionPreset(node) {
+  if (!node) return node;
+  node.nodeType = 'Direction';
+  Object.assign(node, DIRECTION_NODE_DEFAULTS);
+  return node;
+}
+
 function drawNode(node) {
   const radius = NODE_RADIUS * sizeScale;
   
@@ -2236,7 +2261,9 @@ function normalizeNodeType(node) {
   if (node.nodeType === 'בית' || node.nodeType === 'Home' || node.nodeType === 'B') node.nodeType = 'Home';
   else if (node.nodeType === 'שוחה מכוסה' || node.nodeType === 'Covered' || node.nodeType === 'C') node.nodeType = 'Covered';
   else if (node.nodeType === 'קולטן' || node.nodeType === 'Drainage' || node.nodeType === 'D') node.nodeType = 'Drainage';
-  else if (node.nodeType !== 'Home' && node.nodeType !== 'Drainage' && node.nodeType !== 'Covered') node.nodeType = 'Manhole';
+  else if (node.nodeType === 'כיוון' || node.nodeType === 'Direction') node.nodeType = 'Direction';
+  else if (node.nodeType !== 'Home' && node.nodeType !== 'Drainage'
+           && node.nodeType !== 'Covered' && node.nodeType !== 'Direction') node.nodeType = 'Manhole';
   if (node.nodeType === 'Home' && node.directConnection === undefined) node.directConnection = false;
 }
 
@@ -3200,7 +3227,7 @@ function pointerDown(x, y) {
     }
   }
   // Contextual edit: in Node/Home/Drainage mode, allow selecting and dragging existing nodes when clicking on them
-  if ((currentMode === 'node' || currentMode === 'home') && node) {
+  if ((currentMode === 'node' || currentMode === 'home' || currentMode === 'direction') && node) {
     // Toggle close if clicking the same node again
     if (selectedNode && String(selectedNode.id) === String(node.id)) {
       selectedNode = null;
@@ -3228,6 +3255,13 @@ function pointerDown(x, y) {
     const created = createNode(world.x, world.y);
     // Do not enter edit mode or open details; Node mode is for placement only
     scheduleDraw();
+  } else if (currentMode === 'direction') {
+    const created = applyDirectionPreset(createNode(world.x, world.y));
+    selectedNode = created;
+    saveToStorage();
+    draw();
+    renderDetails();
+    showToast(t('toasts.directionCreated'));
   } else if (currentMode === 'home') {
     const created = createNode(world.x, world.y);
     // Switch the created node to Home type but keep numeric ID (like manholes/drainage)
@@ -3309,7 +3343,7 @@ canvas.addEventListener('mousedown', (e) => {
       } else {
         // Empty background: prepare to either pan (if moved) or create node on release (node/home/drainage modes)
         mousePanCandidate = true;
-        mouseAddPending = (currentMode === 'node' || currentMode === 'home');
+        mouseAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction');
         mouseAddPoint = { x: e.offsetX, y: e.offsetY };
         panStart = { x: e.clientX, y: e.clientY };
         translateStart = { ...viewTranslate };
@@ -3476,7 +3510,7 @@ canvas.addEventListener('touchstart', (e) => {
         } else {
           // Background: candidate for panning or tap-to-add on release
           touchPanCandidate = true;
-          touchAddPending = (currentMode === 'node' || currentMode === 'home');
+          touchAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction');
           touchAddPoint = { x, y };
         }
       }
@@ -3557,7 +3591,7 @@ canvas.addEventListener('touchend', (e) => {
   }
   if (e.touches.length === 0) {
     // If a tap-to-add is pending and didn't move much, create node now (Node or Home or Drainage mode)
-    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home') && !isDragging) {
+    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction') && !isDragging) {
       const world = screenToWorld(touchAddPoint.x, touchAddPoint.y);
       // Re-check proximity with touch-friendly thresholds to avoid creating next to an existing node/edge
       const nearNode = findNodeAtWithExpansion(world.x, world.y, TOUCH_SELECT_EXPANSION);
@@ -3567,6 +3601,10 @@ canvas.addEventListener('touchend', (e) => {
         if (currentMode === 'home' && created) {
           // Keep numeric ID for home (like manholes)
           created.nodeType = 'Home';
+        } else if (currentMode === 'direction' && created) {
+          applyDirectionPreset(created);
+          saveToStorage();
+          showToast(t('toasts.directionCreated'));
         }
         scheduleDraw();
       }
@@ -3644,6 +3682,10 @@ if (nodeModeBtn) {
 }
 if (homeNodeModeBtn) {
   homeNodeModeBtn.addEventListener('click', () => setMode('home', { toast: t('home') }));
+}
+if (directionModeBtn) {
+  directionModeBtn.addEventListener('click', () =>
+    setMode('direction', { toast: t('toasts.directionMode') }));
 }
 if (edgeModeBtn) {
   edgeModeBtn.addEventListener('click', () => setMode('edge', {
