@@ -38,6 +38,7 @@ import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../util
 import { migrateGraph, SCHEMA_VERSION, takeRemovedEdgeTypeCount } from '../utils/schema-migration.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
+import * as sketchView from '../features/sketch-view.js';
 import { drawInfiniteGrid as drawInfiniteGridFeature, renderEdgeLegend as renderEdgeLegendFeature, drawEdge as drawEdgeFeature, drawNode as drawNodeFeature } from '../features/rendering.js';
 import { drawNodeIcon } from '../features/node-icons.js';
 import { processLabels } from '../utils/label-collision.js';
@@ -75,6 +76,11 @@ const toastEl = document.getElementById('toast');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const recenterBtn = document.getElementById('recenterBtn');
+const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+const rotateRightBtn = document.getElementById('rotateRightBtn');
+const flipHorizontalBtn = document.getElementById('flipHorizontalBtn');
+const flipVerticalBtn = document.getElementById('flipVerticalBtn');
+const resetOrientationBtn = document.getElementById('resetOrientationBtn');
 const sizeIncreaseBtn = document.getElementById('sizeIncreaseBtn');
 const sizeDecreaseBtn = document.getElementById('sizeDecreaseBtn');
 const appTitleEl = document.getElementById('appTitle');
@@ -1054,6 +1060,11 @@ function applyLangToStaticUI() {
     edgeSecondaryModeBtn.title = t('modeEdgeSecondary');
     edgeSecondaryModeBtn.setAttribute('aria-label', t('modeEdgeSecondary'));
   }
+  if (rotateLeftBtn) { rotateLeftBtn.title = t('rotateLeft'); rotateLeftBtn.setAttribute('aria-label', t('rotateLeft')); }
+  if (rotateRightBtn) { rotateRightBtn.title = t('rotateRight'); rotateRightBtn.setAttribute('aria-label', t('rotateRight')); }
+  if (flipHorizontalBtn) { flipHorizontalBtn.title = t('flipHorizontal'); flipHorizontalBtn.setAttribute('aria-label', t('flipHorizontal')); }
+  if (flipVerticalBtn) { flipVerticalBtn.title = t('flipVertical'); flipVerticalBtn.setAttribute('aria-label', t('flipVertical')); }
+  if (resetOrientationBtn) { resetOrientationBtn.title = t('resetOrientation'); resetOrientationBtn.setAttribute('aria-label', t('resetOrientation')); }
   if (zoomInBtn) { zoomInBtn.title = t('zoomIn'); }
   if (zoomOutBtn) { zoomOutBtn.title = t('zoomOut'); }
   if (sizeIncreaseBtn) { sizeIncreaseBtn.title = t('sizeIncrease'); }
@@ -1756,6 +1767,9 @@ function draw() {
   drawInfiniteGrid();
   ctx.translate(viewTranslate.x, viewTranslate.y);
   ctx.scale(viewScale, viewScale);
+  // Rotation / mirror of the drawing. Applied to the canvas rather than to the
+  // stored coordinates, so nothing downstream of the sketch can notice it.
+  sketchView.applyToContext(ctx);
   // Draw edges first
   edges.forEach((edge) => {
     drawEdge(edge);
@@ -1867,7 +1881,11 @@ function draw() {
     ctx.font = `${label.fontSize}px Arial`;
     ctx.textAlign = label.align;
     ctx.textBaseline = label.baseline;
-    ctx.fillText(label.text, label.x, label.y);
+    // Turn the glyphs back the right way up; a rotated sketch with upside-down
+    // manhole numbers would be worse than no rotation at all.
+    ctx.translate(label.x, label.y);
+    sketchView.keepUpright(ctx);
+    ctx.fillText(label.text, 0, 0);
     ctx.restore();
   });
   
@@ -1969,8 +1987,9 @@ function ensureVirtualPadding() {
   let maxScreenX = -Infinity;
   let maxScreenY = -Infinity;
   for (const n of nodes) {
-    const sx = n.x * viewScale + viewTranslate.x;
-    const sy = n.y * viewScale + viewTranslate.y;
+    const d = sketchView.toDisplay(n.x, n.y);
+    const sx = d.x * viewScale + viewTranslate.x;
+    const sy = d.y * viewScale + viewTranslate.y;
     if (sx < minScreenX) minScreenX = sx;
     if (sy < minScreenY) minScreenY = sy;
     if (sx > maxScreenX) maxScreenX = sx;
@@ -2081,7 +2100,9 @@ function drawEdge(edge) {
       ctx.font = 'bold 9px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('F', iconX, iconY);
+      ctx.translate(iconX, iconY);
+      sketchView.keepUpright(ctx);
+      ctx.fillText('F', 0, 0);
       ctx.restore();
     }
   }
@@ -2133,8 +2154,12 @@ function drawEdgeLabels(edge) {
     const perpX = -normY * offset;
     const perpY = normX * offset;
     const text = String(edge.tail_measurement);
-    ctx.strokeText(text, px + perpX, py + perpY);
-    ctx.fillText(text, px + perpX, py + perpY);
+    ctx.save();
+    ctx.translate(px + perpX, py + perpY);
+    sketchView.keepUpright(ctx);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
   if (edge.head_measurement) {
     const ratio = 0.75;
@@ -2143,8 +2168,12 @@ function drawEdgeLabels(edge) {
     const perpX = -normY * offset;
     const perpY = normX * offset;
     const text = String(edge.head_measurement);
-    ctx.strokeText(text, px + perpX, py + perpY);
-    ctx.fillText(text, px + perpX, py + perpY);
+    ctx.save();
+    ctx.translate(px + perpX, py + perpY);
+    sketchView.keepUpright(ctx);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -4216,10 +4245,13 @@ canvas.addEventListener('wheel', (e) => {
  * Convert screen space (canvas client) coords to world coords (pre-zoom space).
  */
 function screenToWorld(x, y) {
-  return {
+  // Undo pan/zoom, then the orientation, so callers keep working in sketch
+  // coordinates and hit-testing needs no knowledge of how the view is turned.
+  const display = {
     x: (x - viewTranslate.x) / viewScale,
     y: (y - viewTranslate.y) / viewScale,
   };
+  return sketchView.fromDisplay(display.x, display.y);
 }
 
 /**
@@ -4267,7 +4299,8 @@ function getSketchCenter() {
 function recenterView() {
   const rect = canvas.getBoundingClientRect();
   const centerScreen = { x: rect.width / 2, y: rect.height / 2 };
-  const centerWorld = getSketchCenter();
+  const c = getSketchCenter();
+  const centerWorld = sketchView.toDisplay(c.x, c.y);
   viewTranslate.x = centerScreen.x - viewScale * centerWorld.x;
   viewTranslate.y = centerScreen.y - viewScale * centerWorld.y;
   scheduleDraw();
@@ -4278,6 +4311,56 @@ if (recenterBtn) {
   recenterBtn.addEventListener('click', () => {
     try { recenterView(); } catch (_) {}
   });
+}
+
+/**
+ * Turn or mirror the drawing.
+ *
+ * Recentres afterwards so the sketch stays framed rather than swinging off
+ * screen, and marks the buttons while the view is not at its drawn orientation
+ * — otherwise a surveyor who rotated an hour ago has no way to tell.
+ */
+function applyOrientation(change, message) {
+  change();
+  try { recenterView(); } catch (_) { scheduleDraw(); }
+  updateOrientationButtons();
+  // Read the orientation AFTER the change: passing the text in as an argument
+  // reported the state the sketch had a moment ago.
+  showToast(message || orientationToast());
+}
+
+function updateOrientationButtons() {
+  const active = sketchView.isReoriented();
+  [rotateLeftBtn, rotateRightBtn, flipHorizontalBtn, flipVerticalBtn].forEach((b) => {
+    if (b) b.classList.toggle('active', active);
+  });
+  if (resetOrientationBtn) resetOrientationBtn.disabled = !active;
+}
+
+function orientationToast() {
+  const o = sketchView.getOrientation();
+  return t('toasts.orientation', o.degrees, o.flipped);
+}
+
+if (rotateLeftBtn) {
+  rotateLeftBtn.addEventListener('click', () =>
+    applyOrientation(sketchView.rotateLeft));
+}
+if (rotateRightBtn) {
+  rotateRightBtn.addEventListener('click', () =>
+    applyOrientation(sketchView.rotateRight));
+}
+if (flipHorizontalBtn) {
+  flipHorizontalBtn.addEventListener('click', () =>
+    applyOrientation(sketchView.flipHorizontal));
+}
+if (flipVerticalBtn) {
+  flipVerticalBtn.addEventListener('click', () =>
+    applyOrientation(sketchView.flipVertical));
+}
+if (resetOrientationBtn) {
+  resetOrientationBtn.addEventListener('click', () =>
+    applyOrientation(sketchView.resetOrientation, t('toasts.orientationReset')));
 }
 
 /**
@@ -4394,6 +4477,7 @@ async function init() {
   }
   // Default interaction mode is node creation
   setMode('node');
+  updateOrientationButtons();
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
   renderDetails();
