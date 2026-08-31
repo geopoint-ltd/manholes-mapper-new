@@ -3383,7 +3383,7 @@ canvas.addEventListener('touchstart', (e) => {
       pinchStartDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       pinchStartScale = viewScale;
       const centerScreen = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      pinchCenterWorld = screenToWorld(centerScreen.x, centerScreen.y);
+      pinchCenterWorld = screenToDisplay(centerScreen.x, centerScreen.y);
     } else {
       const touch = e.touches[0];
       const x = touch.clientX - rect.left;
@@ -4223,7 +4223,7 @@ canvas.addEventListener('wheel', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
-  const focusWorld = screenToWorld(mouseX, mouseY);
+  const focusWorld = screenToDisplay(mouseX, mouseY);
   const delta = e.deltaY;
   const newScale = delta > 0 ? (viewScale / SCALE_STEP) : (viewScale * SCALE_STEP);
   const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
@@ -4239,14 +4239,29 @@ canvas.addEventListener('wheel', (e) => {
 /**
  * Convert screen space (canvas client) coords to world coords (pre-zoom space).
  */
-function screenToWorld(x, y) {
-  // Undo pan/zoom, then the orientation, so callers keep working in sketch
-  // coordinates and hit-testing needs no knowledge of how the view is turned.
-  const display = {
+/**
+ * Screen -> display space: undoes pan and zoom only.
+ *
+ * This is the space viewTranslate and viewScale operate in, so it is the one to
+ * anchor a zoom against. It is NOT where the nodes live once the sketch is
+ * rotated — use screenToWorld for anything that has to match a node.
+ */
+function screenToDisplay(x, y) {
+  return {
     x: (x - viewTranslate.x) / viewScale,
     y: (y - viewTranslate.y) / viewScale,
   };
-  return sketchView.fromDisplay(display.x, display.y);
+}
+
+/**
+ * Screen -> sketch space: undoes pan, zoom and the orientation.
+ *
+ * Hit-testing, dragging and node creation all work in sketch coordinates and
+ * need no knowledge of how the view is turned.
+ */
+function screenToWorld(x, y) {
+  const d = screenToDisplay(x, y);
+  return sketchView.fromDisplay(d.x, d.y);
 }
 
 /**
@@ -4258,7 +4273,8 @@ function setZoom(newScale) {
   // Zoom centered on canvas center
   const rect = canvas.getBoundingClientRect();
   const centerScreen = { x: rect.width / 2, y: rect.height / 2 };
-  const centerWorld = screenToWorld(centerScreen.x, centerScreen.y);
+  // Display space: this value is about to be multiplied by viewScale.
+  const centerWorld = screenToDisplay(centerScreen.x, centerScreen.y);
   viewScale = clamped;
   viewTranslate.x = centerScreen.x - viewScale * centerWorld.x;
   viewTranslate.y = centerScreen.y - viewScale * centerWorld.y;
