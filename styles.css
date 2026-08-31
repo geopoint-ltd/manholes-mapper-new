@@ -14,7 +14,7 @@
   /* Line-type colours. main.js overwrites these from the canvas palette on every
      draw, so the toolbar glyph, the legend swatch and the drawn line are always
      literally the same colour. The values here only cover the first paint. */
-  --edge-primary: #2563eb;   /* קו ראשי */
+  --edge-primary: #dc2626;   /* קו ראשי */
   --edge-secondary: #0d9488; /* קו משני */
   /* Header surface. Overridden in dark mode — see the dark block near the end. */
   --header-from: #eaf2ff;
@@ -2200,7 +2200,7 @@ input.floating-keyboard-active {
     --header-control-bg: rgba(255, 255, 255, 0.08);
     --header-control-text: #e2e8f0;
     /* Lighter strokes so a line stays visible against the dark canvas. */
-    --edge-primary: #60a5fa;
+    --edge-primary: #f87171;
     --edge-secondary: #2dd4bf;
   }
   .soft-blue-header { border-bottom-color: var(--color-border); }
