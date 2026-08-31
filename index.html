@@ -239,21 +239,15 @@
           <!-- Turning the sketch is a desktop convenience: on a phone the screen
                is too small to gain from it and the buttons would crowd the
                drawing, so CSS hides this group below the desktop breakpoint. -->
-          <div class="segmented orientation-group" id="orientationGroup">
-            <button id="rotateLeftBtn" class="btn" title="">
-              <span class="material-icons" aria-hidden="true">rotate_left</span>
-            </button>
-            <button id="rotateRightBtn" class="btn" title="">
+          <div class="orientation-group" id="orientationGroup">
+            <label class="orientation-row" for="rotationSlider">
               <span class="material-icons" aria-hidden="true">rotate_right</span>
-            </button>
-            <button id="flipHorizontalBtn" class="btn" title="">
+              <input id="rotationSlider" type="range" min="0" max="359" step="1" value="0"
+                     title="" aria-label="" />
+              <output id="rotationValue" for="rotationSlider">0&deg;</output>
+            </label>
+            <button id="flipHorizontalBtn" class="btn orientation-flip" title="">
               <span class="material-icons" aria-hidden="true">swap_horiz</span>
-            </button>
-            <button id="flipVerticalBtn" class="btn" title="">
-              <span class="material-icons" aria-hidden="true">swap_vert</span>
-            </button>
-            <button id="resetOrientationBtn" class="btn" title="">
-              <span class="material-icons" aria-hidden="true">restart_alt</span>
             </button>
           </div>
         </div>

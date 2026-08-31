@@ -1,5 +1,5 @@
-// Orientation of the sketch on screen: rotation in quarter turns, plus an
-// optional mirror.
+// Orientation of the sketch on screen: a free rotation angle, plus an optional
+// left-to-right mirror.
 //
 // This is a VIEW setting and nothing else — it never touches node.x / node.y.
 // That distinction matters more than it looks. The office loader gives an
@@ -16,45 +16,57 @@
 // exported CSVs carry no coordinates at all, and the sketch JSON keeps the
 // coordinates the surveyor actually drew.
 
-/** Quarter turns clockwise on screen, 0..3. */
-let quarterTurns = 0;
+/** Rotation clockwise on screen, in degrees, 0 <= deg < 360. */
+let rotationDeg = 0;
 /** Mirrored left-to-right, applied after the rotation so the axis is the screen's. */
 let flipped = false;
 
-/** Rotation in radians. */
+/** Rotation in radians, for the trigonometry and the canvas. */
 export function angle() {
-  return (quarterTurns * Math.PI) / 2;
+  return (rotationDeg * Math.PI) / 180;
 }
 
 export function getOrientation() {
-  return { quarterTurns, flipped, degrees: quarterTurns * 90 };
+  return { degrees: rotationDeg, flipped };
 }
 
 /** True when the sketch is being shown at anything other than its drawn orientation. */
 export function isReoriented() {
-  return quarterTurns !== 0 || flipped;
+  return rotationDeg !== 0 || flipped;
 }
 
-export function rotateRight() {
-  quarterTurns = (quarterTurns + 1) % 4;
+/** Wrap into [0, 360) so the readout never shows -30 or 400. */
+function normalise(deg) {
+  const d = deg % 360;
+  return d < 0 ? d + 360 : d;
 }
 
-export function rotateLeft() {
-  quarterTurns = (quarterTurns + 3) % 4;
+/** Set an absolute angle in degrees. Any finite value is accepted. */
+export function setRotation(deg) {
+  const n = Number(deg);
+  if (!Number.isFinite(n)) return;
+  rotationDeg = normalise(n);
+}
+
+/** Nudge the angle, for keyboard stepping. */
+export function rotateBy(deltaDeg) {
+  setRotation(rotationDeg + deltaDeg);
 }
 
 export function flipHorizontal() {
   flipped = !flipped;
 }
 
-/** A vertical mirror is a horizontal mirror plus a half turn. */
-export function flipVertical() {
-  flipped = !flipped;
-  quarterTurns = (quarterTurns + 2) % 4;
-}
-
+/**
+ * Clear both the angle and the mirror in one call.
+ *
+ * No control is wired to this: the slider returns to 0 on its own and the flip
+ * button toggles back, so a dedicated reset would be a third way to do what two
+ * controls already do. Kept because it is the natural counterpart to the
+ * setters and the module is far easier to exercise with it.
+ */
 export function resetOrientation() {
-  quarterTurns = 0;
+  rotationDeg = 0;
   flipped = false;
 }
 
@@ -91,8 +103,8 @@ export function applyToContext(ctx) {
 
 /**
  * Undo the orientation for the current point, so text stays upright and
- * readable however the sketch is turned. Call inside a save()/restore() pair,
- * after translating to the text's anchor.
+ * readable at any angle. Call inside a save()/restore() pair, after
+ * translating to the text's anchor.
  */
 export function keepUpright(ctx) {
   ctx.rotate(-angle());
