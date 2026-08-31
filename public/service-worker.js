@@ -16,6 +16,7 @@
 // the network was unavailable and there was no cached response, causing
 // offline pages to break.  Increasing the version here forces browsers
 // to pick up the updated logic.
+// v20 (2026-08-30): zoom anchors in display space again.
 // v19 (2026-08-30): free-angle rotation slider, single mirror.
 // v18 (2026-08-30): sketch rotate/mirror. main.js and styles.css are served
 // stale-while-revalidate from a cache keyed by this constant, so a release that
@@ -28,7 +29,7 @@
 // new worker calls skipWaiting() then clients.claim(), and register-sw.js
 // reloads the page on controllerchange. So every open device reloads within
 // ~15 minutes of the deploy, unprompted.
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
