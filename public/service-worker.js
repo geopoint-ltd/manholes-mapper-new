@@ -32,7 +32,7 @@
 // new worker calls skipWaiting() then clients.claim(), and register-sw.js
 // reloads the page on controllerchange. So every open device reloads within
 // ~15 minutes of the deploy, unprompted.
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

@@ -124,7 +124,10 @@ function renderMenuActions(profile) {
     menuEl = document.createElement('div');
     menuEl.className = 'cloud-menu';
     menuEl.id = 'cloudMenu';
-    menu.appendChild(menuEl);
+    // First, not last. The menu already runs to fifteen entries and scrolls on
+    // a phone, so appending put the one action a field worker opens it for
+    // below the fold, where it may as well not exist.
+    menu.insertBefore(menuEl, menu.firstChild);
   }
   if (!profile) {
     menuEl.innerHTML = '';
@@ -144,6 +147,7 @@ function renderMenuActions(profile) {
       <span class="label">${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</span>
       ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
     </button>
+    <div class="cloud-menu__hint">${escapeHtml(t('cloud.sendHint'))}</div>
     ${isAdmin() ? `<button class="btn" data-cloud-menu="admin"><span class="material-icons">admin_panel_settings</span><span class="label">${escapeHtml(t('cloud.adminTitle'))}</span></button>` : ''}
     <button class="btn" data-cloud-menu="signout">
       <span class="material-icons">logout</span>
