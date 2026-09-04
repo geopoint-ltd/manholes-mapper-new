@@ -29,6 +29,22 @@ export function isFirebaseConfigured() {
   return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId);
 }
 
+/**
+ * Whether a Cloud Storage bucket is available for file attachments.
+ *
+ * Firebase requires a billing account (Blaze) before it will provision a bucket
+ * for a new project, and this deployment runs on the free Spark plan — so there
+ * is none. The console prints a `storageBucket` value in its SDK snippet all
+ * the same, which is exactly why this is a separate check from
+ * isFirebaseConfigured(): leave VITE_FIREBASE_STORAGE_BUCKET empty and the
+ * attachment controls are never rendered, instead of failing at upload time
+ * with a raw Firebase error in front of a surveyor.
+ * @returns {boolean}
+ */
+export function isStorageConfigured() {
+  return isFirebaseConfigured() && Boolean(firebaseConfig.storageBucket);
+}
+
 /** Connect to the local emulator suite instead of the live project. */
 export const useEmulators = String(env.VITE_FIREBASE_EMULATORS || '') === 'true';
 

@@ -8,7 +8,7 @@
 //      so nothing here deletes or rewrites local state.
 
 import './cloud-ui.css';
-import { isFirebaseConfigured, SKETCH_STATUS } from '../firebase/config.js';
+import { isFirebaseConfigured, isStorageConfigured, SKETCH_STATUS } from '../firebase/config.js';
 import { escapeHtml } from '../dom/dom-utils.js';
 import { startAuthWatch, onProfileChanged, getProfile, isAdmin, signOut } from '../firebase/auth.js';
 import { saveSketch, submitSketch, listMySketches } from '../firebase/sketches.js';
@@ -92,15 +92,18 @@ function buildRowActions(sketchId) {
   wrap.dataset.cloudActions = sketchId;
   const status = cloudStatus.get(String(sketchId));
   const sent = status === SKETCH_STATUS.SUBMITTED;
+  // No Storage bucket on the free plan: hide every attachment control rather
+  // than offer a button whose only possible outcome is an error toast.
+  const withFiles = isStorageConfigured();
   wrap.innerHTML = `
     ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
     <button class="btn btn-sm" data-cloud="send">${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</button>
-    <button class="btn btn-sm" data-cloud="attach">
+    ${withFiles ? `<button class="btn btn-sm" data-cloud="attach">
       <span class="material-icons" style="font-size:16px">attach_file</span>
       <span>${escapeHtml(t('cloud.attach'))}</span>
     </button>
     <div class="cloud-attach-list" data-cloud="files"></div>
-    <div class="cloud-progress" data-cloud="progress" style="display:none;"><div class="cloud-progress__bar"></div></div>
+    <div class="cloud-progress" data-cloud="progress" style="display:none;"><div class="cloud-progress__bar"></div></div>` : ''}
   `;
 
   wrap.querySelector('[data-cloud="send"]').addEventListener('click', async (event) => {
@@ -120,7 +123,8 @@ function buildRowActions(sketchId) {
     }
   });
 
-  wrap.querySelector('[data-cloud="attach"]').addEventListener('click', () => {
+  const attachBtn = wrap.querySelector('[data-cloud="attach"]');
+  if (attachBtn) attachBtn.addEventListener('click', () => {
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*,application/pdf';
@@ -146,7 +150,7 @@ function buildRowActions(sketchId) {
     picker.click();
   });
 
-  showFiles(sketchId, wrap);
+  if (withFiles) showFiles(sketchId, wrap);
   return wrap;
 }
 
