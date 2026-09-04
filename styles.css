@@ -3023,3 +3023,69 @@ input.floating-keyboard-active {
   #mobileSearchBar .search-icon { color: var(--color-muted); }
   #mobileSearchBar .btn { min-height: 44px; }
 }
+
+/* ---- header: keep the phone buttons together at the edge ---- */
+#headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ---- the sketch list is a screen, not a dialog ---- */
+
+/* It is where a field worker starts and ends the day: their sketches, what
+   has gone to the office and what has not, and how to send it. A 360px box
+   floating over the canvas could show about two rows of that on a phone. */
+#homePanel .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#homeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#homeHead h2 { margin: 0; }
+
+#homePanel #sketchList {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  margin-top: 0.25rem;
+}
+
+/* Stays put while the list scrolls: the reason for opening this screen must
+   not require scrolling to the bottom to reach. */
+#homeActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+#homeActions .btn { width: 100%; justify-content: center; min-height: 44px; }
+
+@media (max-width: 600px) {
+  #homePanel { align-items: stretch; justify-content: stretch; }
+  #homePanel .panel {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-sizing: border-box;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Desktop keeps a dialog, just a much larger one. */
+@media (min-width: 601px) {
+  #homePanel .panel {
+    width: min(720px, calc(100% - 3rem));
+    height: min(80vh, 900px);
+  }
+}

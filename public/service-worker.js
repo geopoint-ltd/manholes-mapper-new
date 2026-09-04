@@ -32,7 +32,7 @@
 // new worker calls skipWaiting() then clients.claim(), and register-sw.js
 // reloads the page on controllerchange. So every open device reloads within
 // ~15 minutes of the deploy, unprompted.
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
@@ -59,6 +59,16 @@ const OFFLINE_URL = withBase('offline.html');
 // times they reloaded. It now falls through to stale-while-revalidate at the
 // bottom of the fetch handler: still cached for offline use after the first
 // load, but picked up on the visit after a deploy.
+// Served network-first: newest wins, cache is only the offline fallback.
+//
+// main.js is emitted without a content hash but hard-references the hashed
+// chunk names of the build it came from. Served stale-while-revalidate, an old
+// main.js would ask for a chunk that no deploy still hosts — which is exactly
+// how "Failed to fetch dynamically imported module .../admin-panel-<hash>.js"
+// happened. The shell and its chunks have to come from the same release, so
+// while there is a network the shell is always the current one.
+const NETWORK_FIRST = [withBase('main.js'), withBase('styles.css')];
+
 const PRECACHE_ASSETS = [
   withBase('index.html'),
   OFFLINE_URL,
@@ -168,6 +178,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (NETWORK_FIRST.includes(url.pathname) && request.method === 'GET') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request);
+          const clone = response.clone();
+          caches.open(RUNTIME).then((cache) => cache.put(request, clone));
+          return response;
+        } catch (_) {
+          // Offline: the last good copy is better than nothing, and its chunks
+          // are in the runtime cache beside it.
+          const cached = await caches.match(request);
+          return cached || caches.match(OFFLINE_URL);
+        }
+      })()
+    );
+    return;
+  }
+
   // Serve pre‑cached assets with a cache‑first strategy.  If the asset
   // isn’t cached we fetch it from the network, cache it and return it.
   // Should the fetch fail (e.g. offline) we fall back to the offline page.
@@ -205,9 +234,11 @@ self.addEventListener('fetch', (event) => {
           caches.open(RUNTIME).then((cache) => cache.put(request, responseClone));
           return response;
         } catch (_) {
-          // When offline and the file isn’t cached yet, fall back to the offline page rather than
-          // returning a 504 for JS/CSS requests.  This prevents unhandled promise rejections in the app.
-          return caches.match(OFFLINE_URL);
+          // Never answer a JS/CSS request with the offline HTML page: the browser
+          // parses it as the module it asked for and reports a syntax error,
+          // which hides the real cause. An explicit 504 lets the caller see a
+          // failed fetch for what it is.
+          return new Response('', { status: 504, statusText: 'offline' });
         }
       })()
     );

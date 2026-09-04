@@ -1232,6 +1232,13 @@ function applyLangToStaticUI() {
   if (typeof mobileSearchCloseBtn !== 'undefined' && mobileSearchCloseBtn) {
     mobileSearchCloseBtn.title = t('close');
   }
+  if (typeof homeCloseBtn !== 'undefined' && homeCloseBtn) {
+    homeCloseBtn.title = t('close');
+  }
+  if (typeof homeImportBtn !== 'undefined' && homeImportBtn) {
+    setBtnLabel(homeImportBtn, t('importSketch'));
+    homeImportBtn.title = t('importSketch');
+  }
 }
 
 // CSV helpers moved to src/utils/csv.js
@@ -3955,8 +3962,14 @@ if (sketchListEl) {
   });
 }
 
-// Save button. Saving happens on every change anyway; this stays because a
-// surveyor finishing a manhole wants to see something say so.
+// Save button.
+//
+// Every edit already persists on its own (debouncedSaveToStorage), so this
+// button is not what keeps data safe — it is a receipt. A surveyor who has just
+// finished a manhole in the rain wants a visible "נשמר" before pocketing the
+// phone, and autosave is silent by design. It also forces an immediate write
+// rather than waiting out the debounce, which is why the cloud layer clicks it
+// before sending: it is the one path that assigns an id to a new sketch.
 if (saveBtn) {
   saveBtn.addEventListener('click', () => {
     saveToStorage();
@@ -4482,6 +4495,25 @@ if (searchNodeInput) {
   });
 }
 
+
+
+// Full-screen home: a close button (the panel now covers the canvas, so there
+// has to be a way out) and an import entry, because importing a sketch from a
+// file is something a surveyor does *from* the sketch list, not from a menu
+// three taps away.
+const homeCloseBtn = document.getElementById('homeCloseBtn');
+const homeImportBtn = document.getElementById('homeImportBtn');
+
+if (homeCloseBtn && homePanel) {
+  homeCloseBtn.addEventListener('click', () => {
+    homePanel.style.display = 'none';
+  });
+}
+if (homeImportBtn && importSketchBtn) {
+  homeImportBtn.addEventListener('click', () => {
+    importSketchBtn.click();
+  });
+}
 
 // Phone: a manhole search reachable straight from the header.
 //

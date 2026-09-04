@@ -115,14 +115,16 @@
           </button>
         </div>
       </div>
-      <!-- Mobile only: find a manhole without opening the overflow menu first -->
-      <button id="mobileSearchBtn" class="btn btn-ghost" title="">
-        <span class="material-icons">search</span>
-      </button>
-      <!-- Mobile only: toggle to open overflow menu (moved outside #controls so it remains visible on small screens) -->
-      <button id="mobileMenuBtn" class="btn btn-ghost" title="">
-        <span class="material-icons">menu</span>
-      </button>
+      <!-- Mobile only. Grouped so the two sit together at the edge of the
+           header instead of drifting apart across the free space. -->
+      <div id="headerActions">
+        <button id="mobileMenuBtn" class="btn btn-ghost" title="">
+          <span class="material-icons">menu</span>
+        </button>
+        <button id="mobileSearchBtn" class="btn btn-ghost" title="">
+          <span class="material-icons">search</span>
+        </button>
+      </div>
     </header>
 
     <!-- Mobile only: the field the search icon reveals. It sits below the header
@@ -298,9 +300,24 @@
         </div>
         <div id="homePanel" style="display: none;">
           <div class="panel">
-            <h2 id="homeTitle">השרטוטים שלי</h2>
-            <div id="sketchList" style="max-height:50vh;overflow:auto;margin-top:0.5rem;"></div>
-            <button id="createFromHomeBtn" class="btn btn-primary" style="margin-top: 0.7rem;">שרטוט חדש</button>
+            <div id="homeHead">
+              <h2 id="homeTitle">השרטוטים שלי</h2>
+              <button id="homeCloseBtn" class="btn btn-ghost" title="">
+                <span class="material-icons">close</span>
+              </button>
+            </div>
+            <!-- Filled by the cloud layer when signed in: who you are, sign out. -->
+            <div id="homeCloudHeader"></div>
+            <div id="sketchList"></div>
+            <div id="homeActions">
+              <!-- Filled by the cloud layer: send the selected sketches. -->
+              <div id="homeCloudActions"></div>
+              <button id="homeImportBtn" class="btn">
+                <span class="material-icons">upload</span>
+                <span class="label"></span>
+              </button>
+              <button id="createFromHomeBtn" class="btn btn-primary">שרטוט חדש</button>
+            </div>
           </div>
         </div>
         <div id="helpModal">

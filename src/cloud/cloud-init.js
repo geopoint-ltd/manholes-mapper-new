@@ -104,6 +104,113 @@ async function sendCurrentSketch(btn) {
   }
 }
 
+
+/* ---------------- the sketch list as a screen ---------------- */
+
+// Which sketches the surveyor has ticked for sending. Kept by id rather than
+// by row, because renderHome() rebuilds every row from scratch and a selection
+// that vanished on each redraw would be unusable.
+const selected = new Set();
+
+function selectableIds() {
+  return getLibrary().map((r) => String(r.id));
+}
+
+/** Send every ticked sketch, and report how many actually made it. */
+async function sendSelected(btn) {
+  const ids = Array.from(selected);
+  if (ids.length === 0) {
+    toast(t('cloud.noneSelected'));
+    return;
+  }
+  if (btn) btn.disabled = true;
+  let ok = 0;
+  const failures = [];
+  for (const id of ids) {
+    const record = findRecord(id);
+    if (!record) continue;
+    try {
+      await submitSketch(record);
+      cloudStatus.set(String(id), SKETCH_STATUS.SUBMITTED);
+      ok += 1;
+    } catch (err) {
+      // One bad sketch must not silently swallow the rest of the batch.
+      failures.push((err && err.message) || String(err));
+    }
+  }
+  if (btn) btn.disabled = false;
+  selected.clear();
+  if (ok > 0) {
+    toast(String(t('cloud.sentCount')).replace('{n}', String(ok)));
+  }
+  if (failures.length) toast(failures[0]);
+  decorateList();
+  renderHomeCloud(getProfile());
+  renderSendState(true);
+}
+
+/**
+ * Fill the two slots the home screen leaves for the cloud: who is signed in
+ * (with a way out) at the top, and the batch send at the bottom.
+ *
+ * They live in index.html rather than being injected wholesale so the layout
+ * — scrolling list between a fixed head and a fixed action bar — belongs to
+ * the app, and stays coherent when no one is signed in at all.
+ */
+function renderHomeCloud(profile) {
+  const head = document.getElementById('homeCloudHeader');
+  const actions = document.getElementById('homeCloudActions');
+  if (!head || !actions) return;
+  if (!profile) {
+    head.innerHTML = '';
+    actions.innerHTML = '';
+    return;
+  }
+
+  const role = isAdmin() ? 'admin' : 'member';
+  head.innerHTML = `
+    <div class="cloud-home__who">
+      <div class="cloud-home__id">
+        <span class="cloud-home__name" dir="auto">${escapeHtml(profile.displayName || profile.email)}</span>
+        <span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>
+      </div>
+      <button class="btn btn-ghost" data-cloud-home="signout" title="${escapeHtml(t('cloud.signOut'))}">
+        <span class="material-icons">logout</span>
+      </button>
+    </div>
+  `;
+  head.querySelector('[data-cloud-home="signout"]').addEventListener('click', async () => {
+    if (!confirm(t('cloud.confirmSignOut'))) return;
+    await signOut();
+  });
+
+  const count = selected.size;
+  const all = selectableIds();
+  const everySelected = all.length > 0 && all.every((id) => selected.has(id));
+  actions.innerHTML = `
+    <div class="cloud-home__bulk">
+      <button class="btn btn-ghost btn-sm" data-cloud-home="toggleAll">
+        ${escapeHtml(everySelected ? t('cloud.clearSelection') : t('cloud.selectAll'))}
+      </button>
+      <span class="cloud-home__count">${count ? escapeHtml(String(count)) : ''}</span>
+    </div>
+    <button class="btn cloud-menu__send" data-cloud-home="send" ${count ? '' : 'disabled'}>
+      <span class="material-icons">cloud_upload</span>
+      <span class="label">${escapeHtml(t('cloud.sendSelected'))}${count ? ` (${count})` : ''}</span>
+    </button>
+    <div class="cloud-menu__hint">${escapeHtml(t('cloud.sendHint'))}</div>
+  `;
+  actions.querySelector('[data-cloud-home="toggleAll"]').addEventListener('click', () => {
+    if (everySelected) selected.clear();
+    else all.forEach((id) => selected.add(id));
+    decorateList();
+    renderHomeCloud(getProfile());
+  });
+  actions.querySelector('[data-cloud-home="send"]').addEventListener('click', async (event) => {
+    await sendSelected(event.currentTarget);
+  });
+}
+
 /* ---------------- phone menu ---------------- */
 
 let menuEl = null;
@@ -254,6 +361,9 @@ function buildRowActions(sketchId) {
   // than offer a button whose only possible outcome is an error toast.
   const withFiles = isStorageConfigured();
   wrap.innerHTML = `
+    <label class="cloud-pick">
+      <input type="checkbox" data-cloud="pick" ${selected.has(String(sketchId)) ? 'checked' : ''} />
+    </label>
     ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
     <button class="btn btn-sm" data-cloud="send">${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</button>
     ${withFiles ? `<button class="btn btn-sm" data-cloud="attach">
@@ -263,6 +373,15 @@ function buildRowActions(sketchId) {
     <div class="cloud-attach-list" data-cloud="files"></div>
     <div class="cloud-progress" data-cloud="progress" style="display:none;"><div class="cloud-progress__bar"></div></div>` : ''}
   `;
+
+  wrap.querySelector('[data-cloud="pick"]').addEventListener('change', (event) => {
+    const key = String(sketchId);
+    if (event.currentTarget.checked) selected.add(key);
+    else selected.delete(key);
+    // Only the action bar changes; rebuilding the rows here would drop the
+    // checkbox the surveyor is still tapping.
+    renderHomeCloud(getProfile());
+  });
 
   wrap.querySelector('[data-cloud="send"]').addEventListener('click', async (event) => {
     const btn = event.currentTarget;
@@ -353,7 +472,10 @@ function watchList() {
   if (!list || listObserver) return;
   listObserver = new MutationObserver(() => {
     // The list is re-rendered wholesale by renderHome(); re-decorate after it.
-    window.requestAnimationFrame(decorateList);
+    window.requestAnimationFrame(() => {
+      decorateList();
+      renderHomeCloud(getProfile());
+    });
   });
   listObserver.observe(list, { childList: true });
 }
@@ -398,6 +520,7 @@ export function initCloud() {
   onProfileChanged((profile) => {
     renderChip(profile);
     renderMenuActions(profile);
+    renderHomeCloud(profile);
     if (profile) {
       hideLogin();
       watchList();
