@@ -115,11 +115,32 @@
           </button>
         </div>
       </div>
+      <!-- Mobile only: find a manhole without opening the overflow menu first -->
+      <button id="mobileSearchBtn" class="btn btn-ghost" title="">
+        <span class="material-icons">search</span>
+      </button>
       <!-- Mobile only: toggle to open overflow menu (moved outside #controls so it remains visible on small screens) -->
       <button id="mobileMenuBtn" class="btn btn-ghost" title="">
         <span class="material-icons">menu</span>
       </button>
     </header>
+
+    <!-- Mobile only: the field the search icon reveals. It sits below the header
+         rather than inside it so a long manhole number cannot squeeze the logo. -->
+    <div id="mobileSearchBar" style="display:none;">
+      <span class="material-icons search-icon">search</span>
+      <input
+        id="mobileSearchBarInput"
+        type="text"
+        inputmode="numeric"
+        class="search-input"
+        placeholder=""
+        title=""
+      />
+      <button id="mobileSearchCloseBtn" class="btn btn-ghost" title="">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
 
     <!-- Mobile overflow menu. This menu is hidden on larger screens and shows a vertical list of actions on small screens. -->
     <div id="mobileMenu" class="mobile-menu" style="display:none;">

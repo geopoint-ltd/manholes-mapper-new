@@ -1222,6 +1222,16 @@ function applyLangToStaticUI() {
     mobileSearchNodeInput.placeholder = t('searchNode');
     mobileSearchNodeInput.title = t('searchNodeTitle');
   }
+  if (typeof mobileSearchBarInput !== 'undefined' && mobileSearchBarInput) {
+    mobileSearchBarInput.placeholder = t('searchNode');
+    mobileSearchBarInput.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchBtn !== 'undefined' && mobileSearchBtn) {
+    mobileSearchBtn.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchCloseBtn !== 'undefined' && mobileSearchCloseBtn) {
+    mobileSearchCloseBtn.title = t('close');
+  }
 }
 
 // CSV helpers moved to src/utils/csv.js
@@ -4467,6 +4477,63 @@ if (searchNodeInput) {
     searchTimeout = setTimeout(() => {
       if (searchNodeInput.value.trim()) {
         searchAndCenterNode(searchNodeInput.value);
+      }
+    }, 500); // Wait 500ms after user stops typing
+  });
+}
+
+
+// Phone: a manhole search reachable straight from the header.
+//
+// Finding a manhole by number is the single most common thing a surveyor does,
+// and it used to mean opening the overflow menu and scrolling to the field
+// buried in it. This is the same search, one tap away. Behaviour matches the
+// two inputs above deliberately  Enter searches and drops the keyboard, and
+// typing searches 500ms after you stop.
+const mobileSearchBtn = document.getElementById('mobileSearchBtn');
+const mobileSearchBar = document.getElementById('mobileSearchBar');
+const mobileSearchBarInput = document.getElementById('mobileSearchBarInput');
+const mobileSearchCloseBtn = document.getElementById('mobileSearchCloseBtn');
+
+function setMobileSearchOpen(open) {
+  if (!mobileSearchBar) return;
+  mobileSearchBar.style.display = open ? 'flex' : 'none';
+  if (!mobileSearchBarInput) return;
+  if (open) {
+    // Both overlay the same corner of the screen; never show them at once.
+    closeMobileMenu();
+    mobileSearchBarInput.focus();
+    mobileSearchBarInput.select();
+  } else {
+    mobileSearchBarInput.blur();
+  }
+}
+
+if (mobileSearchBtn) {
+  mobileSearchBtn.addEventListener('click', () => {
+    setMobileSearchOpen(!mobileSearchBar || mobileSearchBar.style.display === 'none');
+  });
+}
+if (mobileSearchCloseBtn) {
+  mobileSearchCloseBtn.addEventListener('click', () => setMobileSearchOpen(false));
+}
+if (mobileSearchBarInput) {
+  mobileSearchBarInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchAndCenterNode(mobileSearchBarInput.value);
+      mobileSearchBarInput.blur(); // Close mobile keyboard
+    } else if (e.key === 'Escape') {
+      setMobileSearchOpen(false);
+    }
+  });
+
+  let mobileBarSearchTimeout;
+  mobileSearchBarInput.addEventListener('input', () => {
+    clearTimeout(mobileBarSearchTimeout);
+    mobileBarSearchTimeout = setTimeout(() => {
+      if (mobileSearchBarInput.value.trim()) {
+        searchAndCenterNode(mobileSearchBarInput.value);
       }
     }, 500); // Wait 500ms after user stops typing
   });
