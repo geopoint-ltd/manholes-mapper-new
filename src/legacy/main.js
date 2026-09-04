@@ -411,6 +411,14 @@ function saveAdminConfig() {
   localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(adminConfig));
 }
 
+// The cloud admin panel builds the same CSVs as the local export, so it needs
+// the same column configuration — including whatever the office has customised.
+// Reading the localStorage key directly would miss the defaults applied above
+// when nothing has ever been saved, so hand over the live object instead.
+try {
+  window.getAdminConfig = () => adminConfig;
+} catch (_) {}
+
 function openAdminModal() {
   if (!adminModal || !adminContent) return;
   // Build a professional editor UI for include toggles, defaults, and options
@@ -1222,6 +1230,23 @@ function applyLangToStaticUI() {
     mobileSearchNodeInput.placeholder = t('searchNode');
     mobileSearchNodeInput.title = t('searchNodeTitle');
   }
+  if (typeof mobileSearchBarInput !== 'undefined' && mobileSearchBarInput) {
+    mobileSearchBarInput.placeholder = t('searchNode');
+    mobileSearchBarInput.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchBtn !== 'undefined' && mobileSearchBtn) {
+    mobileSearchBtn.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchCloseBtn !== 'undefined' && mobileSearchCloseBtn) {
+    mobileSearchCloseBtn.title = t('close');
+  }
+  if (typeof homeCloseBtn !== 'undefined' && homeCloseBtn) {
+    homeCloseBtn.title = t('close');
+  }
+  if (typeof homeImportBtn !== 'undefined' && homeImportBtn) {
+    setBtnLabel(homeImportBtn, t('importSketch'));
+    homeImportBtn.title = t('importSketch');
+  }
 }
 
 // CSV helpers moved to src/utils/csv.js
@@ -1469,6 +1494,10 @@ function saveToLibrary() {
   currentSketchId = record.id;
   // Mirror into IndexedDB
   idbSaveRecordCompat(record);
+  // Announce the write so optional layers (e.g. cloud sync) can mirror it.
+  try {
+    window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: record.id } }));
+  } catch (_) {}
 }
 
 function loadFromLibrary(sketchId) {
@@ -1602,6 +1631,31 @@ function ensureCurrentSketchInLibrary() {
     console.warn('Could not mirror the current sketch into the library', e);
   }
 }
+
+// Open a sketch that arrived from the cloud in this same editor.
+//
+// The record joins the local library and is then loaded through loadFromLibrary
+// like any other sketch, so it gets the identical schema migration, back-compat
+// defaults and rendering. Anything that reimplemented that here would drift.
+//
+// Note the consequence, which is deliberate rather than accidental: once opened
+// the sketch is in this device's library, so the signed-in user's own cloud
+// sync will mirror it under their account on the next save. For the office that
+// is the point — they are taking a copy to work on.
+try {
+  window.openSketchRecord = (record) => {
+    if (!record || !record.id) return false;
+    const lib = getLibrary();
+    const id = String(record.id);
+    const idx = lib.findIndex((r) => String(r.id) === id);
+    if (idx >= 0) lib[idx] = { ...lib[idx], ...record };
+    else lib.push(record);
+    setLibrary(lib);
+    const opened = loadFromLibrary(id);
+    if (opened) hideHome();
+    return opened;
+  };
+} catch (_) {}
 
 function renderHome() {
   if (!homePanel || !sketchListEl) return;
@@ -3941,8 +3995,14 @@ if (sketchListEl) {
   });
 }
 
-// Save button. Saving happens on every change anyway; this stays because a
-// surveyor finishing a manhole wants to see something say so.
+// Save button.
+//
+// Every edit already persists on its own (debouncedSaveToStorage), so this
+// button is not what keeps data safe — it is a receipt. A surveyor who has just
+// finished a manhole in the rain wants a visible "נשמר" before pocketing the
+// phone, and autosave is silent by design. It also forces an immediate write
+// rather than waiting out the debounce, which is why the cloud layer clicks it
+// before sending: it is the one path that assigns an id to a new sketch.
 if (saveBtn) {
   saveBtn.addEventListener('click', () => {
     saveToStorage();
@@ -4463,6 +4523,82 @@ if (searchNodeInput) {
     searchTimeout = setTimeout(() => {
       if (searchNodeInput.value.trim()) {
         searchAndCenterNode(searchNodeInput.value);
+      }
+    }, 500); // Wait 500ms after user stops typing
+  });
+}
+
+
+
+// Full-screen home: a close button (the panel now covers the canvas, so there
+// has to be a way out) and an import entry, because importing a sketch from a
+// file is something a surveyor does *from* the sketch list, not from a menu
+// three taps away.
+const homeCloseBtn = document.getElementById('homeCloseBtn');
+const homeImportBtn = document.getElementById('homeImportBtn');
+
+if (homeCloseBtn && homePanel) {
+  homeCloseBtn.addEventListener('click', () => {
+    homePanel.style.display = 'none';
+  });
+}
+if (homeImportBtn && importSketchBtn) {
+  homeImportBtn.addEventListener('click', () => {
+    importSketchBtn.click();
+  });
+}
+
+// Phone: a manhole search reachable straight from the header.
+//
+// Finding a manhole by number is the single most common thing a surveyor does,
+// and it used to mean opening the overflow menu and scrolling to the field
+// buried in it. This is the same search, one tap away. Behaviour matches the
+// two inputs above deliberately  Enter searches and drops the keyboard, and
+// typing searches 500ms after you stop.
+const mobileSearchBtn = document.getElementById('mobileSearchBtn');
+const mobileSearchBar = document.getElementById('mobileSearchBar');
+const mobileSearchBarInput = document.getElementById('mobileSearchBarInput');
+const mobileSearchCloseBtn = document.getElementById('mobileSearchCloseBtn');
+
+function setMobileSearchOpen(open) {
+  if (!mobileSearchBar) return;
+  mobileSearchBar.style.display = open ? 'flex' : 'none';
+  if (!mobileSearchBarInput) return;
+  if (open) {
+    // Both overlay the same corner of the screen; never show them at once.
+    closeMobileMenu();
+    mobileSearchBarInput.focus();
+    mobileSearchBarInput.select();
+  } else {
+    mobileSearchBarInput.blur();
+  }
+}
+
+if (mobileSearchBtn) {
+  mobileSearchBtn.addEventListener('click', () => {
+    setMobileSearchOpen(!mobileSearchBar || mobileSearchBar.style.display === 'none');
+  });
+}
+if (mobileSearchCloseBtn) {
+  mobileSearchCloseBtn.addEventListener('click', () => setMobileSearchOpen(false));
+}
+if (mobileSearchBarInput) {
+  mobileSearchBarInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchAndCenterNode(mobileSearchBarInput.value);
+      mobileSearchBarInput.blur(); // Close mobile keyboard
+    } else if (e.key === 'Escape') {
+      setMobileSearchOpen(false);
+    }
+  });
+
+  let mobileBarSearchTimeout;
+  mobileSearchBarInput.addEventListener('input', () => {
+    clearTimeout(mobileBarSearchTimeout);
+    mobileBarSearchTimeout = setTimeout(() => {
+      if (mobileSearchBarInput.value.trim()) {
+        searchAndCenterNode(mobileSearchBarInput.value);
       }
     }, 500); // Wait 500ms after user stops typing
   });

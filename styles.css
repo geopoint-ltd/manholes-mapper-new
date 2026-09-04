@@ -2984,3 +2984,108 @@ input.floating-keyboard-active {
   #adminScreenContent,
   #adminModal .admin-content { padding-inline: 0.6rem; }
 }
+
+/* ---- phone: search a manhole straight from the header ---- */
+
+/* Desktop keeps its search box inside #controls; these two are phone-only. */
+#mobileSearchBtn { display: none; }
+
+@media (max-width: 600px) {
+  #mobileSearchBtn {
+    display: inline-flex;
+    padding: 0.4rem 0.6rem;
+    min-height: 36px;
+  }
+  /* Sits just under the header, matching the overflow menu's geometry so the
+     two read as the same surface. One z-index below it, since they never
+     appear together. */
+  #mobileSearchBar {
+    position: fixed;
+    top: 3.5rem;
+    inset-inline: 0.75rem;
+    z-index: 219;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 6px;
+    padding: 0.4rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  #mobileSearchBar .search-input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 44px;
+    /* Anything under 16px makes iOS zoom the whole page on focus. */
+    font-size: 16px;
+  }
+  #mobileSearchBar .search-icon { color: var(--color-muted); }
+  #mobileSearchBar .btn { min-height: 44px; }
+}
+
+/* ---- header: keep the phone buttons together at the edge ---- */
+#headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ---- the sketch list is a screen, not a dialog ---- */
+
+/* It is where a field worker starts and ends the day: their sketches, what
+   has gone to the office and what has not, and how to send it. A 360px box
+   floating over the canvas could show about two rows of that on a phone. */
+#homePanel .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#homeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#homeHead h2 { margin: 0; }
+
+#homePanel #sketchList {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  margin-top: 0.25rem;
+}
+
+/* Stays put while the list scrolls: the reason for opening this screen must
+   not require scrolling to the bottom to reach. */
+#homeActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+#homeActions .btn { width: 100%; justify-content: center; min-height: 44px; }
+
+@media (max-width: 600px) {
+  #homePanel { align-items: stretch; justify-content: stretch; }
+  #homePanel .panel {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-sizing: border-box;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Desktop keeps a dialog, just a much larger one. */
+@media (min-width: 601px) {
+  #homePanel .panel {
+    width: min(720px, calc(100% - 3rem));
+    height: min(80vh, 900px);
+  }
+}

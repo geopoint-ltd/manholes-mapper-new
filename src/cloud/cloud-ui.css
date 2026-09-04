@@ -1,0 +1,398 @@
+/* Cloud UI — login, account chip, admin panel.
+ *
+ * Everything here reuses the app's existing tokens (--color-primary,
+ * --color-surface, --color-border ...) and its .btn / .field classes, so this
+ * screen looks like the rest of the app in both light and dark, and in RTL.
+ */
+
+/* ---------- login ---------- */
+
+.cloud-login {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-strong) 100%);
+}
+
+.cloud-login__card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  padding: 1.5rem;
+}
+
+.cloud-login__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 0.35rem;
+}
+
+.cloud-login__brand img { height: 34px; width: auto; }
+
+.cloud-login__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cloud-login__subtitle {
+  margin: 0 0 1.15rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.cloud-login__error {
+  display: none;
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #b91c1c;
+}
+
+.cloud-login__error.is-visible { display: block; }
+
+.cloud-login__link {
+  display: block;
+  margin-top: 0.9rem;
+  text-align: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ---------- header account chip ---------- */
+
+.cloud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+}
+
+.cloud-chip__who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.cloud-chip__name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-chip__role {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+.cloud-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 1px solid var(--color-border);
+}
+
+.cloud-badge--admin { background: rgba(37, 99, 235, 0.12); color: var(--color-primary); border-color: rgba(37, 99, 235, 0.3); }
+.cloud-badge--member { background: rgba(100, 116, 139, 0.12); color: var(--color-muted); }
+.cloud-badge--submitted { background: rgba(22, 163, 74, 0.12); color: #15803d; border-color: rgba(22, 163, 74, 0.3); }
+.cloud-badge--draft { background: rgba(234, 179, 8, 0.14); color: #a16207; border-color: rgba(234, 179, 8, 0.35); }
+.cloud-badge--disabled { background: rgba(239, 68, 68, 0.12); color: #b91c1c; border-color: rgba(239, 68, 68, 0.3); }
+
+/* ---------- admin panel ---------- */
+
+.cloud-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  display: none;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 1rem;
+  overflow: auto;
+}
+
+.cloud-panel.is-open { display: block; }
+
+.cloud-panel__card {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.cloud-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cloud-panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0.6rem 1rem 0;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.cloud-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.cloud-tab.is-active {
+  color: var(--color-primary);
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  font-weight: 600;
+}
+
+.cloud-panel__body { padding: 1rem; }
+.cloud-panel__section { display: none; }
+.cloud-panel__section.is-active { display: block; }
+
+.cloud-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.cloud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+}
+
+.cloud-row__main { min-width: 0; flex: 1 1 220px; }
+.cloud-row__title { font-weight: 600; font-size: 0.94rem; word-break: break-word; }
+.cloud-row__meta { font-size: 0.8rem; color: var(--color-muted); margin-top: 2px; }
+.cloud-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.cloud-empty {
+  text-align: center;
+  color: var(--color-muted);
+  padding: 1.5rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.cloud-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.cloud-note {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+/* ---------- attachments ---------- */
+
+.cloud-attach-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+.cloud-attach {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  font-size: 0.85rem;
+}
+
+.cloud-attach__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-attach__size { color: var(--color-muted); font-size: 0.78rem; }
+.cloud-attach a { color: var(--color-primary); }
+
+.cloud-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-border);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.cloud-progress__bar { height: 100%; width: 0; background: var(--color-primary); transition: width 0.15s linear; }
+
+@media (prefers-color-scheme: dark) {
+  .cloud-login__error { color: #fca5a5; }
+  .cloud-badge--submitted { color: #86efac; }
+  .cloud-badge--draft { color: #fde68a; }
+  .cloud-badge--disabled { color: #fca5a5; }
+}
+
+@media (max-width: 640px) {
+  .cloud-chip__who { display: none; }
+  .cloud-panel { padding: 0; }
+  .cloud-panel__card { border-radius: 0; min-height: 100%; }
+}
+
+/* ---------------- cloud actions inside the phone menu ---------------- */
+
+/* Below 600px styles.css hides #controls outright, so the header chip never
+   reaches a surveyor. These rows live in #mobileMenu instead and inherit its
+   44px full-width button metrics, so they read as part of the menu rather than
+   something bolted onto it. */
+.cloud-menu {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.cloud-menu__who {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 0.15rem 0.35rem;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+/* Sending is the one thing a field worker comes to this menu to do. */
+.cloud-menu__send,
+.cloud-menu__send:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.cloud-menu__send .material-icons,
+.cloud-menu__send .label {
+  color: #fff;
+}
+.cloud-menu__send .cloud-badge--submitted {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+@media (max-width: 600px) {
+  /* The library card gives these their own line; let them fill it instead of
+     shrinking to four cramped targets beside Open / Duplicate / Delete. */
+  .cloud-row__actions {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  .cloud-row__actions .btn {
+    flex: 1 1 auto;
+    min-height: 40px;
+  }
+}
+
+/* The block now leads the menu, so its rule belongs underneath it. */
+.cloud-menu {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  padding-top: 0;
+  padding-bottom: 0.5rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Sending leaves the phone; exporting does not. Say so, rather than relying
+   on a surveyor inferring it from an icon. */
+.cloud-menu__hint {
+  padding: 0.15rem 0.15rem 0.1rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--color-muted);
+}
+
+/* ---------------- the sketch list as a screen ---------------- */
+
+.cloud-home__who {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0.35rem 0.15rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.cloud-home__id { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cloud-home__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-home__bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cloud-home__count { font-size: 0.85rem; color: var(--color-muted); }
+
+/* A deliberately large hit area: this is tapped with a gloved thumb. */
+.cloud-pick {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem;
+  cursor: pointer;
+}
+.cloud-pick input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
+}
+
+#homeCloudActions .cloud-menu__send:disabled {
+  opacity: 0.55;
+}

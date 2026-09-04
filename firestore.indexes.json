@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "comment": "Office inbox: every submitted sketch across all members, newest first.",
+      "collectionGroup": "sketches",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
