@@ -42,6 +42,154 @@ function findRecord(sketchId) {
   return getLibrary().find((r) => String(r.id) === String(sketchId)) || null;
 }
 
+/* ---------------- the sketch being edited ---------------- */
+
+// main.js keeps currentSketchId module-private, so the id has to come from the
+// two things it does publish. They are reliable at different moments:
+//
+//   graphSketch.sketchId   written by saveToStorage() BEFORE saveToLibrary()
+//                          assigns an id, so it lags by one save on a brand new
+//                          sketch, but it always names the sketch on screen.
+//                          Right for rendering a badge.
+//   the sketch:saved event carries the definitive id the moment a save
+//                          completes, but goes stale the instant the surveyor
+//                          starts a new sketch. Right immediately after a save.
+let lastSavedId = null;
+
+/** The sketch currently on the canvas, or null if it has never been saved. */
+function getCurrentSketchId() {
+  try {
+    const raw = localStorage.getItem('graphSketch');
+    const parsed = raw ? JSON.parse(raw) : null;
+    return (parsed && parsed.sketchId) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function currentIsSent() {
+  const id = getCurrentSketchId();
+  return Boolean(id) && cloudStatus.get(String(id)) === SKETCH_STATUS.SUBMITTED;
+}
+
+/**
+ * Send the sketch the surveyor is looking at.
+ *
+ * Saving first is not a convenience: it is what makes the id trustworthy. The
+ * app's own save button runs the one code path that assigns an id to a new
+ * sketch and announces it, so after the click lastSavedId names exactly what is
+ * on screen  no guessing, and the office receives the current drawing rather
+ * than whatever was last written.
+ */
+async function sendCurrentSketch(btn) {
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) saveBtn.click(); // synchronous: sketch:saved fires before this returns
+  const id = lastSavedId || getCurrentSketchId();
+  const record = id ? findRecord(id) : null;
+  if (!record) {
+    toast(t('cloud.nothingToSend'));
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await submitSketch(record);
+    cloudStatus.set(String(id), SKETCH_STATUS.SUBMITTED);
+    toast(t('cloud.sketchSent'));
+    renderSendState(true);
+    decorateList();
+  } catch (err) {
+    toast((err && err.message) || String(err));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ---------------- phone menu ---------------- */
+
+let menuEl = null;
+let renderedSendState = null;
+
+/**
+ * Mirror the cloud actions into #mobileMenu.
+ *
+ * Below 600px styles.css hides #controls outright and the app drives everything
+ * from #mobileMenu, so a control that lives only in the header is invisible to
+ * precisely the people who need it. Surveyors work on phones; without this the
+ * only way to send a sketch was a button buried in a sketch-library row.
+ */
+function renderMenuActions(profile) {
+  const menu = document.getElementById('mobileMenu');
+  if (!menu) return;
+  if (!menuEl) {
+    menuEl = document.createElement('div');
+    menuEl.className = 'cloud-menu';
+    menuEl.id = 'cloudMenu';
+    menu.appendChild(menuEl);
+  }
+  if (!profile) {
+    menuEl.innerHTML = '';
+    menuEl.style.display = 'none';
+    return;
+  }
+  menuEl.style.display = '';
+  const role = isAdmin() ? 'admin' : 'member';
+  const sent = currentIsSent();
+  menuEl.innerHTML = `
+    <div class="cloud-menu__who">
+      <span dir="auto">${escapeHtml(profile.displayName || profile.email)}</span>
+      <span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>
+    </div>
+    <button class="btn cloud-menu__send" data-cloud-menu="send">
+      <span class="material-icons">cloud_upload</span>
+      <span class="label">${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</span>
+      ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
+    </button>
+    ${isAdmin() ? `<button class="btn" data-cloud-menu="admin"><span class="material-icons">admin_panel_settings</span><span class="label">${escapeHtml(t('cloud.adminTitle'))}</span></button>` : ''}
+    <button class="btn" data-cloud-menu="signout">
+      <span class="material-icons">logout</span>
+      <span class="label">${escapeHtml(t('cloud.signOut'))}</span>
+    </button>
+  `;
+
+  const close = () => {
+    // The same gesture main.js uses for every other entry in this menu.
+    if (menu) menu.style.display = 'none';
+  };
+
+  menuEl.querySelector('[data-cloud-menu="send"]').addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    close();
+    await sendCurrentSketch(btn);
+  });
+  const adminItem = menuEl.querySelector('[data-cloud-menu="admin"]');
+  if (adminItem) {
+    adminItem.addEventListener('click', async () => {
+      close();
+      const panel = await import('./admin-panel.js');
+      panel.openAdminPanel();
+    });
+  }
+  menuEl.querySelector('[data-cloud-menu="signout"]').addEventListener('click', async () => {
+    close();
+    if (!confirm(t('cloud.confirmSignOut'))) return;
+    await signOut();
+  });
+}
+
+/**
+ * Re-render the send controls only when the answer actually changed. Every
+ * keystroke triggers a debounced save, and rebuilding the menu each time would
+ * thrash the DOM mid-survey.
+ */
+function renderSendState(force) {
+  const state = currentIsSent() ? 'sent' : 'draft';
+  if (!force && state === renderedSendState) return;
+  renderedSendState = state;
+  const profile = getProfile();
+  renderMenuActions(profile);
+  renderChip(profile);
+}
+
 /* ---------------- header chip ---------------- */
 
 function renderChip(profile) {
@@ -65,11 +213,17 @@ function renderChip(profile) {
       <span class="cloud-chip__name" dir="auto">${escapeHtml(profile.displayName || profile.email)}</span>
       <span class="cloud-chip__role">${escapeHtml(t(`cloud.role_${role}`))}</span>
     </div>
+    <button class="btn btn-ghost" id="cloudSendBtn" title="${escapeHtml(currentIsSent() ? t('cloud.sendAgain') : t('cloud.sendSketch'))}">
+      <span class="material-icons">cloud_upload</span>
+    </button>
     ${isAdmin() ? `<button class="btn btn-ghost" id="cloudAdminBtn" title="${escapeHtml(t('cloud.adminTitle'))}"><span class="material-icons">admin_panel_settings</span></button>` : ''}
     <button class="btn btn-ghost" id="cloudSignOutBtn" title="${escapeHtml(t('cloud.signOut'))}">
       <span class="material-icons">logout</span>
     </button>
   `;
+  chipEl.querySelector('#cloudSendBtn').addEventListener('click', async (event) => {
+    await sendCurrentSketch(event.currentTarget);
+  });
   const adminBtn = chipEl.querySelector('#cloudAdminBtn');
   if (adminBtn) {
     adminBtn.addEventListener('click', async () => {
@@ -180,7 +334,9 @@ function decorateList() {
   if (!list) return;
   list.querySelectorAll('[data-action="open"][data-id]').forEach((btn) => {
     const sketchId = btn.getAttribute('data-id');
-    const row = btn.closest('div[style]') || btn.parentElement;
+    // The whole card, not the Open/Duplicate/Delete row: a phone cannot fit a
+    // fifth button on that line, and the cloud actions need room of their own.
+    const row = btn.closest('#sketchList > div') || btn.closest('div[style]') || btn.parentElement;
     if (!row) return;
     const existing = row.querySelector(`[data-cloud-actions="${CSS.escape(sketchId)}"]`);
     if (existing) existing.remove();
@@ -223,6 +379,7 @@ async function loadCloudStatuses() {
     cloudStatus.clear();
     remote.forEach((s) => cloudStatus.set(String(s.id), s.status || SKETCH_STATUS.DRAFT));
     decorateList();
+    renderSendState(true);
   } catch (err) {
     console.warn('could not read cloud sketches', err && err.message);
   }
@@ -236,6 +393,7 @@ export function initCloud() {
 
   onProfileChanged((profile) => {
     renderChip(profile);
+    renderMenuActions(profile);
     if (profile) {
       hideLogin();
       watchList();
@@ -249,6 +407,9 @@ export function initCloud() {
   // main.js announces every library write; mirror it to the cloud, debounced.
   window.addEventListener('sketch:saved', (event) => {
     const id = event && event.detail && event.detail.id;
-    if (id) scheduleSync(id);
+    if (!id) return;
+    lastSavedId = id;
+    scheduleSync(id);
+    renderSendState(false);
   });
 }
