@@ -14,6 +14,8 @@ import {
 } from '../firebase/users.js';
 import { listSubmittedSketches } from '../firebase/sketches.js';
 import { listAttachments, formatSize } from '../firebase/attachments.js';
+import { isStorageConfigured } from '../firebase/config.js';
+import { buildSketchZip, saveBlob, sketchDisplayName } from './sketch-zip.js';
 
 let el = null;
 
@@ -137,6 +139,8 @@ async function renderInbox() {
   list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.loading'))}</div>`;
   try {
     const sketches = await listSubmittedSketches();
+    inboxCache.clear();
+    sketches.forEach((s) => inboxCache.set(String(s.id), s));
     if (!sketches.length) {
       list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.inboxEmpty'))}</div>`;
       return;
@@ -146,7 +150,7 @@ async function renderInbox() {
         (s) => `
         <div class="cloud-row">
           <div class="cloud-row__main">
-            <div class="cloud-row__title">${escapeHtml(s.name || s.id)}</div>
+            <div class="cloud-row__title">${escapeHtml(sketchDisplayName(s))}</div>
             <div class="cloud-row__meta" dir="auto">
               ${escapeHtml(s.ownerEmail || '')} ·
               ${escapeHtml(t('cloud.nodes'))}: ${Number(s.nodeCount) || 0} ·
@@ -156,7 +160,9 @@ async function renderInbox() {
             <div class="cloud-attach-list" data-files-for="${escapeHtml(s.ownerUid || '')}|${escapeHtml(s.id)}"></div>
           </div>
           <div class="cloud-row__actions">
-            <button class="btn btn-sm" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>
+            <button class="btn btn-sm btn-primary" data-act="open" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.open'))}</button>
+            <button class="btn btn-sm" data-act="zip" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.download'))}</button>
+            ${isStorageConfigured() ? `<button class="btn btn-sm" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
           </div>
         </div>`
       )
@@ -166,6 +172,73 @@ async function renderInbox() {
     // carries the console link that creates it.
     list.innerHTML = `<div class="cloud-empty">${escapeHtml((err && err.message) || String(err))}</div>`;
   }
+}
+
+/** The sketches currently listed, so a download reuses what was already read. */
+const inboxCache = new Map();
+
+/**
+ * Hand the office one archive per sketch: the manholes CSV, the lines CSV and
+ * the sketch itself, named after the day it was drawn.
+ *
+ * Nothing is stored to produce this — the files are generated from the sketch
+ * document that is already in Firestore, which is what lets it work on the free
+ * plan where there is no Storage bucket at all.
+ */
+async function downloadZip(sketchId, btn) {
+  const sketch = inboxCache.get(String(sketchId));
+  if (!sketch) return;
+  const label = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('cloud.preparing');
+  }
+  try {
+    // Written by main.js. Absent only if the legacy bundle has not run, in
+    // which case the sketch JSON still travels and the CSVs are skipped rather
+    // than written against guessed columns.
+    const adminConfig =
+      typeof window.getAdminConfig === 'function' ? window.getAdminConfig() : null;
+    const { blob, filename } = await buildSketchZip(sketch, adminConfig, t);
+    saveBlob(blob, filename);
+  } catch (err) {
+    toast((err && err.message) || String(err));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+}
+
+/**
+ * Load a received sketch into the editor, still signed in as the office.
+ *
+ * The sketch document already carries its nodes and edges, so nothing more has
+ * to be fetched; it is reshaped into the record form the local library uses and
+ * handed to the app, which opens it through its own load path.
+ */
+function openInEditor(sketchId) {
+  const s = inboxCache.get(String(sketchId));
+  if (!s) return;
+  if (typeof window.openSketchRecord !== 'function') {
+    toast('cannot open: the editor is not ready');
+    return;
+  }
+  const now = new Date().toISOString();
+  const nodes = Array.isArray(s.nodes) ? s.nodes : [];
+  const record = {
+    id: String(s.id),
+    name: s.name || null,
+    nodes,
+    edges: Array.isArray(s.edges) ? s.edges : [],
+    nextNodeId: Number(s.nextNodeId) || nodes.length + 1,
+    createdAt: s.createdAt || s.creationDate || now,
+    updatedAt: s.updatedAt || now,
+    creationDate: s.creationDate || s.createdAt || now,
+    schemaVersion: s.schemaVersion,
+  };
+  if (window.openSketchRecord(record)) closeAdminPanel();
 }
 
 async function showFiles(uid, sketchId) {
@@ -256,8 +329,18 @@ function wire() {
   });
 
   el.querySelector('#cloudInboxList').addEventListener('click', (event) => {
-    const btn = event.target.closest('button[data-act="files"]');
-    if (btn) showFiles(btn.getAttribute('data-uid'), btn.getAttribute('data-sketch'));
+    const filesBtn = event.target.closest('button[data-act="files"]');
+    if (filesBtn) {
+      showFiles(filesBtn.getAttribute('data-uid'), filesBtn.getAttribute('data-sketch'));
+      return;
+    }
+    const zipBtn = event.target.closest('button[data-act="zip"]');
+    if (zipBtn) {
+      downloadZip(zipBtn.getAttribute('data-sketch'), zipBtn);
+      return;
+    }
+    const openBtn = event.target.closest('button[data-act="open"]');
+    if (openBtn) openInEditor(openBtn.getAttribute('data-sketch'));
   });
 }
 

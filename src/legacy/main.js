@@ -411,6 +411,14 @@ function saveAdminConfig() {
   localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(adminConfig));
 }
 
+// The cloud admin panel builds the same CSVs as the local export, so it needs
+// the same column configuration — including whatever the office has customised.
+// Reading the localStorage key directly would miss the defaults applied above
+// when nothing has ever been saved, so hand over the live object instead.
+try {
+  window.getAdminConfig = () => adminConfig;
+} catch (_) {}
+
 function openAdminModal() {
   if (!adminModal || !adminContent) return;
   // Build a professional editor UI for include toggles, defaults, and options
@@ -1623,6 +1631,31 @@ function ensureCurrentSketchInLibrary() {
     console.warn('Could not mirror the current sketch into the library', e);
   }
 }
+
+// Open a sketch that arrived from the cloud in this same editor.
+//
+// The record joins the local library and is then loaded through loadFromLibrary
+// like any other sketch, so it gets the identical schema migration, back-compat
+// defaults and rendering. Anything that reimplemented that here would drift.
+//
+// Note the consequence, which is deliberate rather than accidental: once opened
+// the sketch is in this device's library, so the signed-in user's own cloud
+// sync will mirror it under their account on the next save. For the office that
+// is the point — they are taking a copy to work on.
+try {
+  window.openSketchRecord = (record) => {
+    if (!record || !record.id) return false;
+    const lib = getLibrary();
+    const id = String(record.id);
+    const idx = lib.findIndex((r) => String(r.id) === id);
+    if (idx >= 0) lib[idx] = { ...lib[idx], ...record };
+    else lib.push(record);
+    setLibrary(lib);
+    const opened = loadFromLibrary(id);
+    if (opened) hideHome();
+    return opened;
+  };
+} catch (_) {}
 
 function renderHome() {
   if (!homePanel || !sketchListEl) return;

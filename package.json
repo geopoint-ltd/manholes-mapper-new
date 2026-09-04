@@ -19,6 +19,7 @@
   },
   "type": "module",
   "dependencies": {
-    "firebase": "^12.18.0"
+    "firebase": "^12.18.0",
+    "jszip": "^3.10.1"
   }
 }
