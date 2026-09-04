@@ -7,6 +7,7 @@ import { syncHeaderHeightVar } from './dom/dom-utils.js';
 import * as CONSTS from './state/constants.js';
 import { attachFloatingKeyboard } from './utils/floating-keyboard.js';
 import { initResizableDrawer } from './utils/resizable-drawer.js';
+import { markPreviewBuild } from './utils/deploy-target.js';
 
 // Provide a translator globally for legacy code if not yet present
 if (typeof window !== 'undefined') {
@@ -44,6 +45,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('DOMContentLoaded', () => {
     attachFloatingKeyboard();
     initResizableDrawer();
+    // No-op on the field app; labels pull-request previews so they cannot be
+    // mistaken for it.
+    markPreviewBuild();
   });
 }
 

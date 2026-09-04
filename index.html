@@ -93,14 +93,6 @@
           </div>
         </div>
 
-        <!-- Autosave toggle -->
-        <div class="toolbar-group">
-          <label class="btn btn-ghost autosave-btn">
-            <input id="autosaveToggle" type="checkbox" />
-            <span class="label"></span>
-          </label>
-        </div>
-
         <!-- Language selector -->
         <div class="toolbar-group">
           <select id="langSelect" class="btn btn-ghost" title="">
@@ -188,11 +180,6 @@
         <span class="material-icons">save</span>
         <span class="label"></span>
       </button>
-      <!-- Autosave toggle replicates desktop toggle -->
-      <label id="mobileAutosaveLabel" style="display:flex;align-items:center;gap:6px;margin-top:0.4rem;">
-        <input id="mobileAutosaveToggle" type="checkbox" />
-        <span class="label"></span>
-      </label>
       <!-- Language selector replicates desktop selector -->
       <select id="mobileLangSelect" class="btn" style="margin-top:0.4rem;">
         <option value="he">עברית</option>
@@ -209,7 +196,7 @@
     </div>
     <!-- Dedicated Admin Screen (separate from the canvas) -->
     <div id="adminScreen" style="display:none;">
-      <div class="panel admin-container" style="margin:1rem auto;">
+      <div class="panel admin-container">
         <div class="admin-header">
           <h2 id="adminScreenTitle">
             <span class="material-icons">settings</span>
@@ -242,9 +229,27 @@
         <canvas id="graphCanvas"></canvas>
         <div class="canvas-toolbar">
           <div class="segmented" id="modeGroup">
-            <button id="nodeModeBtn" class="btn" title=""></button>
-            <button id="homeNodeModeBtn" class="btn" title=""></button>
-            <button id="edgeModeBtn" class="btn" title=""></button>
+            <button id="nodeModeBtn" class="btn mode-node" title=""></button>
+            <button id="homeNodeModeBtn" class="btn mode-home" title=""></button>
+            <button id="directionModeBtn" class="btn mode-direction" title=""></button>
+            <!-- One button per line type. The colour on each matches the colour
+                 that line is drawn in, so the toolbar doubles as the legend. -->
+            <button id="edgeModeBtn" class="btn mode-edge mode-edge-primary" title=""></button>
+            <button id="edgeSecondaryModeBtn" class="btn mode-edge mode-edge-secondary" title=""></button>
+          </div>
+          <!-- Turning the sketch is a desktop convenience: on a phone the screen
+               is too small to gain from it and the buttons would crowd the
+               drawing, so CSS hides this group below the desktop breakpoint. -->
+          <div class="orientation-group" id="orientationGroup">
+            <label class="orientation-row" for="rotationSlider">
+              <span class="material-icons" aria-hidden="true">rotate_right</span>
+              <input id="rotationSlider" type="range" min="0" max="359" step="1" value="0"
+                     title="" aria-label="" />
+              <output id="rotationValue" for="rotationSlider">0&deg;</output>
+            </label>
+            <button id="flipHorizontalBtn" class="btn orientation-flip" title="">
+              <span class="material-icons" aria-hidden="true">swap_horiz</span>
+            </button>
           </div>
         </div>
         <div id="toast"></div>

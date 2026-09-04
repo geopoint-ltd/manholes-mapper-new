@@ -35,8 +35,10 @@ import { distanceToSegment } from '../utils/geometry.js';
 import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
 import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
+import { migrateGraph, SCHEMA_VERSION, takeRemovedEdgeTypeCount } from '../utils/schema-migration.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
+import * as sketchView from '../features/sketch-view.js';
 import { drawInfiniteGrid as drawInfiniteGridFeature, renderEdgeLegend as renderEdgeLegendFeature, drawEdge as drawEdgeFeature, drawNode as drawNodeFeature } from '../features/rendering.js';
 import { drawNodeIcon } from '../features/node-icons.js';
 import { processLabels } from '../utils/label-collision.js';
@@ -48,7 +50,9 @@ const newSketchBtn = document.getElementById('newSketchBtn');
 const homeBtn = document.getElementById('homeBtn');
 const nodeModeBtn = document.getElementById('nodeModeBtn');
 const homeNodeModeBtn = document.getElementById('homeNodeModeBtn');
+const directionModeBtn = document.getElementById('directionModeBtn');
 const edgeModeBtn = document.getElementById('edgeModeBtn');
+const edgeSecondaryModeBtn = document.getElementById('edgeSecondaryModeBtn');
 // Separate export buttons for nodes and edges
 const exportNodesBtn = document.getElementById('exportNodesBtn');
 const exportEdgesBtn = document.getElementById('exportEdgesBtn');
@@ -65,7 +69,6 @@ const dateInput = document.getElementById('dateInput');
 const startBtn = document.getElementById('startBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const helpBtn = document.getElementById('helpBtn');
-const autosaveToggle = document.getElementById('autosaveToggle');
 const saveBtn = document.getElementById('saveBtn');
 const editModeBtn = null; // Removed edit button; edit functionality handled contextually
 const helpModal = document.getElementById('helpModal');
@@ -74,6 +77,9 @@ const toastEl = document.getElementById('toast');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const recenterBtn = document.getElementById('recenterBtn');
+const rotationSlider = document.getElementById('rotationSlider');
+const rotationValue = document.getElementById('rotationValue');
+const flipHorizontalBtn = document.getElementById('flipHorizontalBtn');
 const sizeIncreaseBtn = document.getElementById('sizeIncreaseBtn');
 const sizeDecreaseBtn = document.getElementById('sizeDecreaseBtn');
 const appTitleEl = document.getElementById('appTitle');
@@ -124,8 +130,6 @@ const mobileExportEdgesBtn = document.getElementById('mobileExportEdgesBtn');
 const mobileExportSketchBtn = document.getElementById('mobileExportSketchBtn');
 const mobileImportSketchBtn = document.getElementById('mobileImportSketchBtn');
 const mobileSaveBtn = document.getElementById('mobileSaveBtn');
-const mobileAutosaveToggle = document.getElementById('mobileAutosaveToggle');
-const mobileAutosaveLabel = document.getElementById('mobileAutosaveLabel');
 const mobileLangSelect = document.getElementById('mobileLangSelect');
 const mobileHelpBtn = document.getElementById('mobileHelpBtn');
 
@@ -165,7 +169,6 @@ function synthesizeClickOnTap(element) {
   adminBtn,
   homeBtn,
   langSelect,
-  autosaveToggle,
   mobileMenuBtn
 ].forEach(synthesizeClickOnTap);
 
@@ -179,11 +182,20 @@ let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 // Current interaction mode: 'node' to create nodes, 'edge' to create edges
 let currentMode = 'node';
+// Which line type the edge buttons will give a newly drawn line. Held here
+// rather than read from the admin default so the button you pressed is the
+// type you get — there is no hidden second source of truth.
+let currentEdgeType = EDGE_TYPES[0];
 let pendingEdgeTail = null;
 let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
+let schemaVersion = SCHEMA_VERSION; // stamped on save; older sketches migrate on load
 let currentSketchName = null; // human-friendly name for the sketch
-let autosaveEnabled = true;
+// Every change is written to the library as well as to localStorage. This used
+// to be a toggle, and a device left in manual mode kept its library copy stale:
+// a reload dropped the surveyor on the sketch list, and opening the sketch from
+// there restored the older copy over their newer work. Saving is not a
+// preference worth offering when losing a day of survey is the downside.
 let currentLang = 'he';
 // Pointer position used for edge preview in edge mode
 let pendingEdgePreview = null; // { x, y } or null
@@ -238,6 +250,7 @@ import {
   COLORS,
   NODE_TYPES,
   NODE_TYPE_OPTIONS,
+  DIRECTION_NODE_DEFAULTS,
   NODE_MATERIAL_OPTIONS,
   NODE_COVER_DIAMETERS,
   NODE_ACCESS_OPTIONS,
@@ -247,9 +260,10 @@ import {
   EDGE_TYPES,
   EDGE_TYPE_OPTIONS,
   EDGE_TYPE_COLORS,
-  EDGE_TYPE_SELECTED_COLORS,
   EDGE_ENGINEERING_STATUS,
   NODE_ACCURACY_OPTIONS,
+  NODE_MANHOLE_MATERIAL_OPTIONS,
+  EDGE_FALL_TYPE_OPTIONS,
 } from '../state/constants.js';
 const NODE_MATERIALS = NODE_MATERIAL_OPTIONS.map(o => o.label);
 const EDGE_MATERIALS = EDGE_MATERIAL_OPTIONS.map(o => o.label);
@@ -281,6 +295,7 @@ const defaultAdminConfig = {
       type: true,
       note: true,
       material: true,
+      manhole_material: true,
       cover_diameter: true,
       access: true,
       accuracy_level: true,
@@ -289,14 +304,16 @@ const defaultAdminConfig = {
     },
     defaults: {
       material: NODE_MATERIALS[0],
+      manhole_material: NODE_MATERIALS[0],
       cover_diameter: '',
       access: 0,
-      accuracy_level: 0,
+      accuracy_level: 1,
       engineering_status: 0,
       maintenance_status: 0,
     },
     options: {
       material: NODE_MATERIAL_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
+      manhole_material: NODE_MANHOLE_MATERIAL_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       access: NODE_ACCESS_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       accuracy_level: NODE_ACCURACY_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       // engineering_status removed for nodes
@@ -311,7 +328,7 @@ const defaultAdminConfig = {
       tail_measurement: true,
       head_measurement: true,
       fall_depth: true,
-      fall_position: true,
+      fall_type: true,
       line_diameter: true,
       note: true,
       edge_material: true,
@@ -324,7 +341,7 @@ const defaultAdminConfig = {
       tail_measurement: '',
       head_measurement: '',
       fall_depth: '',
-      fall_position: 0,
+      fall_type: 0,
       line_diameter: '',
       engineering_status: 0,
     },
@@ -333,14 +350,36 @@ const defaultAdminConfig = {
       edge_type: EDGE_TYPE_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       engineering_status: EDGE_ENGINEERING_STATUS.map(o => ({ code: o.code, label: o.label, enabled: true })),
       line_diameter: EDGE_LINE_DIAMETERS.map(v => ({ code: v, label: v, enabled: true })),
-      fall_position: [
-        { code: 0, label: 'פנימי', enabled: true },
-        { code: 1, label: 'חיצוני', enabled: true },
-      ],
+      fall_type: EDGE_FALL_TYPE_OPTIONS.map(o => ({ code: o.code, label: o.label, enabled: true })),
     },
     // customFields removed
   }
 };
+
+/**
+ * Force the option lists the code owns back to their built-in values.
+ *
+ * The stored settings blob replaces `edges` wholesale, so a device that saved
+ * settings under an older build still carries that build's lists.
+ *
+ * For edge_type that is a correctness problem: the codes are the geodatabase
+ * domain LineSubType_1, not a preference, and the stale copy has 4802/4803 the
+ * wrong way round plus the retired קו סניקה — it would quietly export pipes
+ * under the wrong subtype. For fall_type it is a cosmetic one: the stale copy
+ * still spells the options "מפל חיצוני"/"מפל פנימי". Either way the device's
+ * saved copy of these two lists is discarded.
+ */
+function normalizeCodeOwnedOptions(cfg) {
+  if (!cfg || !cfg.edges) return;
+  cfg.edges.options = cfg.edges.options || {};
+  const own = (list) => list.map((o) => ({ code: o.code, label: o.label, enabled: true }));
+  cfg.edges.options.edge_type = own(EDGE_TYPE_OPTIONS);
+  cfg.edges.options.fall_type = own(EDGE_FALL_TYPE_OPTIONS);
+  cfg.edges.defaults = cfg.edges.defaults || {};
+  if (!EDGE_TYPES.includes(cfg.edges.defaults.edge_type)) {
+    cfg.edges.defaults.edge_type = EDGE_TYPES[0];
+  }
+}
 
 let adminConfig = (() => {
   try {
@@ -360,6 +399,7 @@ let adminConfig = (() => {
     merged.edges.defaults = merged.edges.defaults || {};
     // Undo labels that an earlier settings save truncated at an embedded quote
     repairTruncatedAdminLabels(merged);
+    normalizeCodeOwnedOptions(merged);
     return merged;
   } catch (e) {
     console.warn('Failed to load admin config; using defaults', e);
@@ -394,6 +434,7 @@ function openAdminModal() {
   // Sections
   adminContent.appendChild(buildOptionsEditor(t('admin.tabNodes'), 'nodes', [
     { key: 'material', label: t('labels.coverMaterial'), type: 'select', optionsKey: 'material', valueKind: 'label' },
+    { key: 'manhole_material', label: t('labels.manholeMaterial'), type: 'select', optionsKey: 'manhole_material', valueKind: 'label' },
     { key: 'cover_diameter', label: t('labels.coverDiameter'), type: 'text' },
     { key: 'access', label: t('labels.access'), type: 'select', optionsKey: 'access', valueKind: 'code' },
     { key: 'accuracy_level', label: t('labels.accuracyLevel'), type: 'select', optionsKey: 'accuracy_level', valueKind: 'code' },
@@ -404,7 +445,7 @@ function openAdminModal() {
     { key: 'material', label: t('labels.edgeMaterial'), type: 'select', optionsKey: 'material', valueKind: 'label' },
     { key: 'edge_type', label: t('labels.edgeType'), type: 'select', optionsKey: 'edge_type', valueKind: 'label' },
     { key: 'line_diameter', label: t('labels.lineDiameter'), type: 'select', optionsKey: 'line_diameter', valueKind: 'label' },
-    { key: 'fall_position', label: t('labels.fallPosition'), type: 'select', optionsKey: 'fall_position', valueKind: 'code' },
+    { key: 'fall_type', label: t('labels.fallType'), type: 'select', optionsKey: 'fall_type', valueKind: 'code' },
     
   ]));
 
@@ -512,6 +553,7 @@ function openAdminScreen() {
   // Sections
   adminScreenContent.appendChild(buildOptionsEditor(t('admin.tabNodes'), 'nodes', [
     { key: 'material', label: 'חומר מכסה', type: 'select', optionsKey: 'material', valueKind: 'label' },
+    { key: 'manhole_material', label: 'חומר שוחה', type: 'select', optionsKey: 'manhole_material', valueKind: 'label' },
     { key: 'cover_diameter', label: 'קוטר מכסה', type: 'text' },
     { key: 'access', label: 'גישה', type: 'select', optionsKey: 'access', valueKind: 'code' },
     { key: 'accuracy_level', label: 'רמת דיוק', type: 'select', optionsKey: 'accuracy_level', valueKind: 'code' },
@@ -522,7 +564,7 @@ function openAdminScreen() {
     { key: 'edge_type', label: 'סוג קו', type: 'select', optionsKey: 'edge_type', valueKind: 'label' },
     { key: 'line_diameter', label: 'קוטר קו', type: 'select', optionsKey: 'line_diameter', valueKind: 'label' },
     { key: 'engineering_status', label: 'סטטוס הנדסי', type: 'select', optionsKey: 'engineering_status', valueKind: 'code' },
-    { key: 'fall_position', label: 'מפל פנימי/חיצוני', type: 'select', optionsKey: 'fall_position', valueKind: 'code' },
+    { key: 'fall_type', label: 'סוג מפל', type: 'select', optionsKey: 'fall_type', valueKind: 'code' },
   ]));
 
   // Initialize defaults
@@ -661,7 +703,7 @@ if (adminSaveBtn) adminSaveBtn.addEventListener('click', () => {
     const val = (el.tagName === 'SELECT') ? el.value : el.value;
     // Treat defaults for selects as label unless spec requested 'code'
     let stored = val;
-    const numericKeys = new Set(['access','accuracy_level','fall_position','engineering_status','maintenance_status']);
+    const numericKeys = new Set(['access','accuracy_level','fall_type','engineering_status','maintenance_status']);
     if (numericKeys.has(key)) {
       const num = Number(val);
       // Allow empty default (optional)
@@ -878,7 +920,7 @@ if (adminScreenSaveBtn) adminScreenSaveBtn.addEventListener('click', () => {
   adminScreenContent.querySelectorAll('[data-def]').forEach((el) => {
     const [scope, key] = el.getAttribute('data-def').split(':');
     let stored = (el.tagName === 'SELECT') ? el.value : el.value;
-    const numericKeys = new Set(['access','accuracy_level','fall_position','engineering_status','maintenance_status']);
+    const numericKeys = new Set(['access','accuracy_level','fall_type','engineering_status','maintenance_status']);
     if (numericKeys.has(key)) {
       const num = Number(stored);
       stored = (stored === '' ? '' : (Number.isFinite(num) ? num : 0));
@@ -1005,11 +1047,27 @@ function applyLangToStaticUI() {
     homeNodeModeBtn.title = t('modeHome');
     homeNodeModeBtn.setAttribute('aria-label', t('modeHome'));
   }
-  if (edgeModeBtn) {
-    edgeModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">timeline</span>';
-    edgeModeBtn.title = t('modeEdge');
-    edgeModeBtn.setAttribute('aria-label', t('modeEdge'));
+  if (directionModeBtn) {
+    // A circle with a needle in it — the same idea as the icon on the canvas.
+    directionModeBtn.innerHTML = '<span class="material-icons" aria-hidden="true">explore</span>';
+    directionModeBtn.title = t('modeDirection');
+    directionModeBtn.setAttribute('aria-label', t('modeDirection'));
   }
+  // Each line button draws the pipe it creates, in that type's colour, instead
+  // of a shared icon — the colour is the only thing that distinguishes them,
+  // so it has to be the thing you see.
+  if (edgeModeBtn) {
+    edgeModeBtn.innerHTML = '<span class="line-glyph" aria-hidden="true"></span>';
+    edgeModeBtn.title = t('modeEdgePrimary');
+    edgeModeBtn.setAttribute('aria-label', t('modeEdgePrimary'));
+  }
+  if (edgeSecondaryModeBtn) {
+    edgeSecondaryModeBtn.innerHTML = '<span class="line-glyph" aria-hidden="true"></span>';
+    edgeSecondaryModeBtn.title = t('modeEdgeSecondary');
+    edgeSecondaryModeBtn.setAttribute('aria-label', t('modeEdgeSecondary'));
+  }
+  if (rotationSlider) { rotationSlider.title = t('rotation'); rotationSlider.setAttribute('aria-label', t('rotation')); }
+  if (flipHorizontalBtn) { flipHorizontalBtn.title = t('flipHorizontal'); flipHorizontalBtn.setAttribute('aria-label', t('flipHorizontal')); }
   if (zoomInBtn) { zoomInBtn.title = t('zoomIn'); }
   if (zoomOutBtn) { zoomOutBtn.title = t('zoomOut'); }
   if (sizeIncreaseBtn) { sizeIncreaseBtn.title = t('sizeIncrease'); }
@@ -1020,10 +1078,6 @@ function applyLangToStaticUI() {
   if (exportEdgesBtn) { exportEdgesBtn.title = t('exportEdges'); }
   setBtnLabel(saveBtn, t('save'));
   if (saveBtn) saveBtn.title = t('save');
-  if (autosaveToggle) {
-    const autosaveLabelEl = autosaveToggle.parentElement && autosaveToggle.parentElement.querySelector('.label');
-    if (autosaveLabelEl) autosaveLabelEl.textContent = t('autosave');
-  }
   if (helpBtn) { helpBtn.title = t('help'); setBtnLabel(helpBtn, t('help')); }
   if (adminBtn) { adminBtn.title = t('admin.manage'); }
   if (recenterBtn) { 
@@ -1120,10 +1174,6 @@ function applyLangToStaticUI() {
     const lbl = mobileAdminBtn.querySelector('.label');
     if (lbl) lbl.textContent = t('admin.manage');
     mobileAdminBtn.title = t('admin.manage');
-  }
-  if (mobileAutosaveToggle) {
-    const lbl = mobileAutosaveLabel && mobileAutosaveLabel.querySelector('.label');
-    if (lbl) lbl.textContent = t('autosave');
   }
   // Update edge legend alignment per language
   renderEdgeLegend();
@@ -1247,12 +1297,17 @@ function loadFromStorage() {
     if (!parsed || !parsed.nodes || !parsed.edges) return false;
     nodes = parsed.nodes;
     edges = parsed.edges;
+    // Must run before the back-compat defaults below: they would fill in
+    // fall_type and the migration would no longer see the legacy value.
+    schemaVersion = migrateGraph(nodes, edges, parsed.schemaVersion);
+    reportSchemaMigration();
     creationDate = parsed.creationDate || null;
     currentSketchId = parsed.sketchId || null;
     currentSketchName = parsed.sketchName || null;
     // Ensure each node has required properties
     nodes.forEach((node) => {
       if (node.material === undefined) node.material = NODE_MATERIALS[0];
+      if (node.manholeMaterial === undefined) node.manholeMaterial = NODE_MATERIALS[0];
       if (node.type === undefined) node.type = NODE_TYPES[0];
       normalizeNodeType(node);
       // Normalize cover diameter to integer or empty
@@ -1266,7 +1321,7 @@ function loadFromStorage() {
         const acc = Number(node.access);
         node.access = Number.isFinite(acc) ? acc : 0;
       }
-      if (node.accuracyLevel === undefined) node.accuracyLevel = 0;
+      if (node.accuracyLevel === undefined) node.accuracyLevel = 1;
       if (typeof node.accuracyLevel !== 'number') {
         const acl = Number(node.accuracyLevel);
         node.accuracyLevel = Number.isFinite(acl) ? acl : 0;
@@ -1283,6 +1338,7 @@ function loadFromStorage() {
     edges.forEach((edge) => {
       if (edge.material === undefined) edge.material = EDGE_MATERIALS[0];
       if (edge.fall_depth === undefined) edge.fall_depth = '';
+      if (edge.fall_type === undefined) edge.fall_type = 0;
       if (edge.line_diameter === undefined) edge.line_diameter = '';
       if (edge.edge_type === undefined) edge.edge_type = EDGE_TYPES[0];
       if (edge.maintenanceStatus === undefined) edge.maintenanceStatus = 0;
@@ -1330,13 +1386,12 @@ function saveToStorage() {
     creationDate: creationDate,
     sketchId: currentSketchId,
     sketchName: currentSketchName,
+    schemaVersion,
   };
   localStorage.setItem('graphSketch', JSON.stringify(payload));
   // Persist to IndexedDB for durability
   idbSaveCurrentCompat(payload);
-  if (autosaveEnabled) {
-    saveToLibrary();
-  }
+  saveToLibrary();
 }
 
 // Debounced saver to reduce jank on mobile while typing
@@ -1396,6 +1451,7 @@ function saveToLibrary() {
     nextNodeId,
     creationDate: creationDate || nowIso,
     name: currentSketchName || null,
+    schemaVersion,
   };
   const idx = lib.findIndex((s) => s.id === record.id);
   if (idx >= 0) {
@@ -1425,9 +1481,13 @@ function loadFromLibrary(sketchId) {
   if (!rec) return false;
   nodes = rec.nodes || [];
   edges = rec.edges || [];
+  // Before the back-compat defaults below, for the same reason as above.
+  schemaVersion = migrateGraph(nodes, edges, rec.schemaVersion);
+  reportSchemaMigration();
   // Backward compatibility for nodes
   nodes.forEach((node) => {
     if (node.material === undefined) node.material = NODE_MATERIALS[0];
+    if (node.manholeMaterial === undefined) node.manholeMaterial = NODE_MATERIALS[0];
     if (node.type === undefined) node.type = NODE_TYPES[0];
     normalizeNodeType(node);
     if (node.coverDiameter === undefined) node.coverDiameter = NODE_COVER_DIAMETERS[0];
@@ -1446,7 +1506,7 @@ function loadFromLibrary(sketchId) {
   // Backward compatibility: ensure new fields exist
   edges.forEach((edge) => {
     if (edge.fall_depth === undefined) edge.fall_depth = '';
-    if (edge.fall_position === undefined) edge.fall_position = '';
+    if (edge.fall_type === undefined) edge.fall_type = 0;
     if (edge.line_diameter === undefined) edge.line_diameter = '';
     if (edge.edge_type === undefined) edge.edge_type = EDGE_TYPES[0];
     if (edge.maintenanceStatus === undefined) edge.maintenanceStatus = 0;
@@ -1486,33 +1546,64 @@ function deleteFromLibrary(sketchId) {
   idbDeleteRecordCompat(sketchId);
 }
 
-function migrateSingleSketchToLibraryIfNeeded() {
-  const lib = getLibrary();
-  if (lib.length > 0) return; // already migrated or has sketches
+/**
+ * Make sure the sketch in `graphSketch` also exists in the library, and is the
+ * version the library holds.
+ *
+ * Startup shows the library list whenever it has anything in it, and never
+ * reopens `graphSketch` on its own. So a sketch that is only in `graphSketch` —
+ * or is newer there than in the library — has no route back: the list either
+ * does not show it, or shows an older copy that overwrites the newer one when
+ * opened. `graphSketch` is written on every change, so it is never behind; it
+ * is the copy worth trusting here.
+ *
+ * This used to run only when the library was empty, which left exactly that gap
+ * on any device whose library was not empty.
+ */
+function ensureCurrentSketchInLibrary() {
   try {
     const raw = localStorage.getItem('graphSketch');
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.nodes || !parsed.edges) return;
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return;
+    // An empty sketch is not worth a library entry of its own.
+    if (!parsed.nodes.length && !parsed.edges.length) return;
+
+    const lib = getLibrary();
     const id = parsed.sketchId || generateSketchId();
+    const idx = lib.findIndex((r) => r && r.id === id);
+    const existing = idx >= 0 ? lib[idx] : null;
     const nowIso = new Date().toISOString();
     const record = {
       id,
-      createdAt: parsed.creationDate || nowIso,
+      createdAt: (existing && existing.createdAt) || parsed.creationDate || nowIso,
       updatedAt: nowIso,
       nodes: parsed.nodes,
       edges: parsed.edges,
       nextNodeId: parsed.nextNodeId || 1,
-      creationDate: parsed.creationDate || nowIso,
-      name: parsed.sketchName || null,
+      creationDate: parsed.creationDate || (existing && existing.creationDate) || nowIso,
+      // Don't drop a name the library already knows just because this copy lacks one.
+      name: parsed.sketchName || (existing && existing.name) || null,
+      schemaVersion: parsed.schemaVersion,
     };
-    setLibrary([record]);
+    // Replace this one entry. Rewriting the whole array would delete every
+    // other sketch on the device.
+    if (idx >= 0) lib[idx] = record;
+    else lib.unshift(record);
+    setLibrary(lib);
     currentSketchId = id;
-    saveToStorage();
-    // Also populate IndexedDB with the migrated record
+
+    // Stamp the id back so the next launch updates this record instead of
+    // adding another one. Re-serialising `parsed` keeps the nodes and edges
+    // intact — writing via saveToStorage() here would persist the in-memory
+    // graph, which is still empty this early in startup.
+    if (!parsed.sketchId) {
+      parsed.sketchId = id;
+      localStorage.setItem('graphSketch', JSON.stringify(parsed));
+    }
     idbSaveRecordCompat(record);
   } catch (e) {
-    console.warn('Migration skipped', e);
+    console.warn('Could not mirror the current sketch into the library', e);
   }
 }
 
@@ -1571,6 +1662,7 @@ function newSketch(date) {
   pendingEdgeTail = null;
   creationDate = date;
   currentSketchId = null; // new unsaved sketch
+  schemaVersion = SCHEMA_VERSION;
   currentSketchName = null;
   saveToStorage();
   draw();
@@ -1599,11 +1691,12 @@ function createNode(x, y) {
     y: y,
     note: '',
     material: (adminConfig.nodes?.defaults?.material ?? NODE_MATERIALS[0]),
+    manholeMaterial: (adminConfig.nodes?.defaults?.manhole_material ?? NODE_MATERIALS[0]),
     coverDiameter: (adminConfig.nodes?.defaults?.cover_diameter ?? ''),
     type: 'type1',
     nodeType: 'Manhole',
     access: (adminConfig.nodes?.defaults?.access ?? 0),
-    accuracyLevel: (adminConfig.nodes?.defaults?.accuracy_level ?? 0),
+    accuracyLevel: (adminConfig.nodes?.defaults?.accuracy_level ?? 1),
     nodeEngineeringStatus: (adminConfig.nodes?.defaults?.engineering_status ?? 0),
     maintenanceStatus: (adminConfig.nodes?.defaults?.maintenance_status ?? 0),
   };
@@ -1645,9 +1738,12 @@ function createEdge(tailId, headId) {
     tail_measurement: (adminConfig.edges?.defaults?.tail_measurement ?? ''),
     head_measurement: (adminConfig.edges?.defaults?.head_measurement ?? ''),
     fall_depth: (adminConfig.edges?.defaults?.fall_depth ?? ''),
-    fall_position: (adminConfig.edges?.defaults?.fall_position ?? ''),
+    fall_type: (adminConfig.edges?.defaults?.fall_type ?? 0),
     line_diameter: (adminConfig.edges?.defaults?.line_diameter ?? ''),
-    edge_type: (adminConfig.edges?.defaults?.edge_type ?? EDGE_TYPES[0]),
+    // The line type comes from the button that is armed, not from the admin
+    // default — pressing "קו משני" and getting a קו ראשי would be a lie.
+    edge_type: currentEdgeType,
+    note: '',
     material: (adminConfig.edges?.defaults?.material ?? EDGE_MATERIALS[0]),
     maintenanceStatus: 0,
     engineeringStatus: (adminConfig.edges?.defaults?.engineering_status ?? 0),
@@ -1678,6 +1774,9 @@ function draw() {
   drawInfiniteGrid();
   ctx.translate(viewTranslate.x, viewTranslate.y);
   ctx.scale(viewScale, viewScale);
+  // Rotation / mirror of the drawing. Applied to the canvas rather than to the
+  // stored coordinates, so nothing downstream of the sketch can notice it.
+  sketchView.applyToContext(ctx);
   // Draw edges first
   edges.forEach((edge) => {
     drawEdge(edge);
@@ -1789,7 +1888,11 @@ function draw() {
     ctx.font = `${label.fontSize}px Arial`;
     ctx.textAlign = label.align;
     ctx.textBaseline = label.baseline;
-    ctx.fillText(label.text, label.x, label.y);
+    // Turn the glyphs back the right way up; a rotated sketch with upside-down
+    // manhole numbers would be worse than no rotation at all.
+    ctx.translate(label.x, label.y);
+    sketchView.keepUpright(ctx);
+    ctx.fillText(label.text, 0, 0);
     ctx.restore();
   });
   
@@ -1804,7 +1907,69 @@ function draw() {
 
 function renderEdgeLegend() {
   const legend = document.getElementById('edgeLegend');
+  syncEdgeTypeCssVars();
   renderEdgeLegendFeature(legend, EDGE_TYPE_COLORS);
+}
+
+/**
+ * Publish the canvas line colours as CSS variables.
+ *
+ * The toolbar glyphs and the legend swatches are CSS, the line itself is
+ * canvas. Copying the palette across on every draw — which includes the redraw
+ * triggered by a light/dark switch — means the button can never end up showing
+ * a colour the canvas no longer uses.
+ */
+function syncEdgeTypeCssVars() {
+  const root = document.documentElement;
+  root.style.setProperty('--edge-primary', EDGE_TYPE_COLORS[EDGE_TYPES[0]]);
+  root.style.setProperty('--edge-secondary', EDGE_TYPE_COLORS[EDGE_TYPES[1]]);
+}
+
+/**
+ * Tell the surveyor when opening a sketch rewrote something under them.
+ *
+ * Retiring קו סניקה silently would leave a line reading קו ראשי that the
+ * surveyor is sure they marked otherwise, so the conversion gets said out loud
+ * once — the note it wrote is where the original type now lives.
+ */
+function reportSchemaMigration() {
+  const converted = takeRemovedEdgeTypeCount();
+  if (converted === 0) return;
+  // Deferred, and held longer than a routine toast. Loading a sketch emits its
+  // own "השרטוט נפתח" immediately after this call, and a toast replaces rather
+  // than queues — announcing the conversion synchronously means it is wiped a
+  // millisecond later and the surveyor never learns their line was rewritten.
+  setTimeout(() => showToast(t('toasts.removedEdgeTypeConverted', converted), 6000), 0);
+}
+
+/**
+ * Switch drawing mode and light the one button that is now active.
+ *
+ * @param {'node'|'home'|'edge'} mode
+ * @param {{edgeType?: string, toast?: string}} [options] edgeType applies to
+ *   'edge' only and becomes the type of every line drawn until it changes.
+ */
+function setMode(mode, options = {}) {
+  commitIdInputIfFocused();
+  currentMode = mode;
+  if (mode === 'edge' && options.edgeType) currentEdgeType = options.edgeType;
+
+  // Exactly one button is lit, and for 'edge' it is the one whose line type is
+  // armed — otherwise the surveyor cannot tell which line they are about to draw.
+  const activeBtn = mode === 'node' ? nodeModeBtn
+    : mode === 'home' ? homeNodeModeBtn
+      : mode === 'direction' ? directionModeBtn
+        : (currentEdgeType === EDGE_TYPES[1] ? edgeSecondaryModeBtn : edgeModeBtn);
+  [nodeModeBtn, homeNodeModeBtn, directionModeBtn, edgeModeBtn, edgeSecondaryModeBtn].forEach((btn) => {
+    if (btn) btn.classList.toggle('active', btn === activeBtn);
+  });
+
+  pendingEdgeTail = null;
+  pendingEdgePreview = null;
+  selectedNode = null;
+  selectedEdge = null;
+  renderDetails();
+  if (options.toast) showToast(options.toast);
 }
 
 /**
@@ -1830,8 +1995,9 @@ function ensureVirtualPadding() {
   let maxScreenX = -Infinity;
   let maxScreenY = -Infinity;
   for (const n of nodes) {
-    const sx = n.x * viewScale + viewTranslate.x;
-    const sy = n.y * viewScale + viewTranslate.y;
+    const d = sketchView.toDisplay(n.x, n.y);
+    const sx = d.x * viewScale + viewTranslate.x;
+    const sy = d.y * viewScale + viewTranslate.y;
     if (sx < minScreenX) minScreenX = sx;
     if (sy < minScreenY) minScreenY = sy;
     if (sx > maxScreenX) maxScreenX = sx;
@@ -1942,7 +2108,9 @@ function drawEdge(edge) {
       ctx.font = 'bold 9px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('F', iconX, iconY);
+      ctx.translate(iconX, iconY);
+      sketchView.keepUpright(ctx);
+      ctx.fillText('F', 0, 0);
       ctx.restore();
     }
   }
@@ -1994,8 +2162,12 @@ function drawEdgeLabels(edge) {
     const perpX = -normY * offset;
     const perpY = normX * offset;
     const text = String(edge.tail_measurement);
-    ctx.strokeText(text, px + perpX, py + perpY);
-    ctx.fillText(text, px + perpX, py + perpY);
+    ctx.save();
+    ctx.translate(px + perpX, py + perpY);
+    sketchView.keepUpright(ctx);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
   if (edge.head_measurement) {
     const ratio = 0.75;
@@ -2004,10 +2176,30 @@ function drawEdgeLabels(edge) {
     const perpX = -normY * offset;
     const perpY = normX * offset;
     const text = String(edge.head_measurement);
-    ctx.strokeText(text, px + perpX, py + perpY);
-    ctx.fillText(text, px + perpX, py + perpY);
+    ctx.save();
+    ctx.translate(px + perpX, py + perpY);
+    sketchView.keepUpright(ctx);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
   ctx.restore();
+}
+
+/**
+ * Turn a freshly created node into a direction point.
+ *
+ * The whole value of the button is that these five fields are already right by
+ * the time the surveyor looks at the node: a כיוון point is schematic, has
+ * nothing known about it, and is identified downstream by the word in its note.
+ * The note is only seeded — it is ordinary free text afterwards, so
+ * "כיוון - מדדתי בתאריך ..." works without fighting anything.
+ */
+function applyDirectionPreset(node) {
+  if (!node) return node;
+  node.nodeType = 'Direction';
+  Object.assign(node, DIRECTION_NODE_DEFAULTS);
+  return node;
 }
 
 function drawNode(node) {
@@ -2073,7 +2265,9 @@ function normalizeNodeType(node) {
   if (node.nodeType === 'בית' || node.nodeType === 'Home' || node.nodeType === 'B') node.nodeType = 'Home';
   else if (node.nodeType === 'שוחה מכוסה' || node.nodeType === 'Covered' || node.nodeType === 'C') node.nodeType = 'Covered';
   else if (node.nodeType === 'קולטן' || node.nodeType === 'Drainage' || node.nodeType === 'D') node.nodeType = 'Drainage';
-  else if (node.nodeType !== 'Home' && node.nodeType !== 'Drainage' && node.nodeType !== 'Covered') node.nodeType = 'Manhole';
+  else if (node.nodeType === 'כיוון' || node.nodeType === 'Direction') node.nodeType = 'Direction';
+  else if (node.nodeType !== 'Home' && node.nodeType !== 'Drainage'
+           && node.nodeType !== 'Covered' && node.nodeType !== 'Direction') node.nodeType = 'Manhole';
   if (node.nodeType === 'Home' && node.directConnection === undefined) node.directConnection = false;
 }
 
@@ -2097,6 +2291,137 @@ function buildNodeTypeSelectHtml(node) {
 }
 
 /**
+ * Options offered for FallType, in the order the surveyor picks them.
+ * 0 (לא ידוע) is the resting value and is never shown as a choice.
+ * @returns {Array<{code:number,label:string}>}
+ */
+function fallTypeChoices() {
+  const configured = adminConfig.edges?.options?.fall_type ?? EDGE_FALL_TYPE_OPTIONS;
+  const enabled = configured.filter((o) => o.enabled !== false && Number(o.code) !== 0);
+  // חיצוני first, then פנימי, then ירידה חופשית — the order asked for in the field.
+  const order = [2, 3, 1];
+  return enabled.slice().sort((a, b) => order.indexOf(Number(a.code)) - order.indexOf(Number(b.code)));
+}
+
+/**
+ * Radio group for FallType (סוג מפל).
+ *
+ * Only meaningful once a fall depth has been entered, so the inputs are
+ * disabled until then rather than hidden — a disabled control still tells the
+ * surveyor the question exists and what it will ask.
+ * @param {string} groupId unique per edge, so two rows never share a radio group
+ * @param {object} edge
+ * @returns {string} HTML
+ */
+/** The line types on offer, as labels. */
+function edgeTypeChoices() {
+  return (adminConfig.edges?.options?.edge_type ?? EDGE_TYPE_OPTIONS)
+    .filter((o) => o.enabled !== false)
+    .map((o) => o.label || o);
+}
+
+/**
+ * Line type as radio buttons rather than a dropdown.
+ *
+ * There are only two, and a dropdown hides the one you did not pick behind a
+ * tap — on a phone, in the sun, that is how a קו משני gets left as קו ראשי.
+ * Both are visible at once, each next to the colour it will draw in.
+ */
+function buildEdgeTypeHtml(groupId, edge) {
+  const current = edge.edge_type || EDGE_TYPES[0];
+  const radios = edgeTypeChoices()
+    .map((label, i) => {
+      const id = `${groupId}_${i}`;
+      return `<label class="edge-type-option" for="${escapeHtml(id)}">
+          <input type="radio" id="${escapeHtml(id)}" name="${escapeHtml(groupId)}"
+                 value="${escapeHtml(label)}" ${current === label ? 'checked' : ''} />
+          <span class="edge-type-swatch" style="background:${escapeHtml(EDGE_TYPE_COLORS[label] || '#555')}"></span>
+          <span>${escapeHtml(label)}</span>
+        </label>`;
+    })
+    .join('');
+  return `<div class="field col-span-2 edge-type-field" data-edge-type-group="${escapeHtml(groupId)}">
+      <label>${t('labels.edgeType')}</label>
+      <div class="edge-type-options">${radios}</div>
+    </div>`;
+}
+
+/**
+ * Wire a line-type radio group. Redraws so the line changes colour under the
+ * surveyor's finger as they pick.
+ */
+function wireEdgeType(container, groupId, edge) {
+  const wrap = container.querySelector(`[data-edge-type-group="${CSS.escape(groupId)}"]`);
+  if (!wrap) return;
+  wrap.querySelectorAll('input[type="radio"]').forEach((input) => {
+    input.addEventListener('change', (e) => {
+      if (!e.target.checked) return;
+      edge.edge_type = e.target.value;
+      saveToStorage();
+      scheduleDraw();
+    });
+  });
+}
+
+function buildFallTypeHtml(groupId, edge) {
+  const hasDepth = edge.fall_depth !== '' && edge.fall_depth !== null && edge.fall_depth !== undefined;
+  const current = Number(edge.fall_type) || 0;
+  const radios = fallTypeChoices()
+    .map((o) => {
+      const id = `${groupId}_${o.code}`;
+      return `<label class="fall-type-option" for="${escapeHtml(id)}">
+          <input type="radio" id="${escapeHtml(id)}" name="${escapeHtml(groupId)}"
+                 value="${escapeHtml(o.code)}" ${current === Number(o.code) ? 'checked' : ''}
+                 ${hasDepth ? '' : 'disabled'} />
+          <span>${escapeHtml(o.label)}</span>
+        </label>`;
+    })
+    .join('');
+  return `<div class="field col-span-2 fall-type-field" data-fall-group="${escapeHtml(groupId)}">
+      <label>${t('labels.fallType')}</label>
+      <div class="fall-type-options ${hasDepth ? '' : 'is-disabled'}">${radios}</div>
+    </div>`;
+}
+
+/**
+ * Wire a FallType radio group and keep it in step with its depth input.
+ * @param {HTMLElement} container
+ * @param {string} groupId
+ * @param {HTMLInputElement|null} depthInput
+ * @param {object} edge
+ */
+function wireFallType(container, groupId, depthInput, edge) {
+  const wrap = container.querySelector(`[data-fall-group="${CSS.escape(groupId)}"]`);
+  if (!wrap) return;
+  const radios = Array.from(wrap.querySelectorAll('input[type="radio"]'));
+  radios.forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      edge.fall_type = Number(radio.value);
+      saveToStorage();
+      scheduleDraw();
+    });
+  });
+  const syncEnabled = () => {
+    const hasDepth = depthInput
+      ? String(depthInput.value || '').trim() !== ''
+      : edge.fall_depth !== '' && edge.fall_depth !== null && edge.fall_depth !== undefined;
+    radios.forEach((radio) => { radio.disabled = !hasDepth; });
+    wrap.querySelector('.fall-type-options').classList.toggle('is-disabled', !hasDepth);
+    if (!hasDepth) {
+      // Clearing the depth clears the type, so the two can never disagree.
+      radios.forEach((radio) => { radio.checked = false; });
+      if (Number(edge.fall_type) !== 0) {
+        edge.fall_type = 0;
+        debouncedSaveToStorage();
+      }
+    }
+  };
+  if (depthInput) depthInput.addEventListener('input', syncEnabled);
+  syncEnabled();
+}
+
+/**
  * Render the right-hand details panel based on the current selection.
  * Supports editing node id, note, material and edge type/material/measurements.
  */
@@ -2112,6 +2437,14 @@ function renderDetails() {
       .map(o => o.label || o);
     nodeMaterialOptionLabels.forEach((mat) => {
       materialOptions += `<option value="${escapeHtml(mat)}" ${node.material === mat ? 'selected' : ''}>${escapeHtml(mat)}</option>`;
+    });
+    // Shaft material (ManholeMat) — same domain, separate field from the cover
+    let manholeMaterialOptions = '';
+    const manholeMaterialLabels = (adminConfig.nodes?.options?.manhole_material ?? NODE_MANHOLE_MATERIAL_OPTIONS)
+      .filter(o => (o.enabled !== false))
+      .map(o => o.label || o);
+    manholeMaterialLabels.forEach((mat) => {
+      manholeMaterialOptions += `<option value="${escapeHtml(mat)}" ${node.manholeMaterial === mat ? 'selected' : ''}>${escapeHtml(mat)}</option>`;
     });
     // Cover diameter as free integer input
     // Access options
@@ -2159,6 +2492,11 @@ function renderDetails() {
               <label for="materialSelect">${t('labels.coverMaterial')}</label>
               <select id="materialSelect">${materialOptions}</select>
             </div>
+            ${adminConfig.nodes.include.manhole_material ? `
+            <div class="field">
+              <label for="manholeMaterialSelect">${t('labels.manholeMaterial')}</label>
+              <select id="manholeMaterialSelect">${manholeMaterialOptions}</select>
+            </div>` : ''}
             ${adminConfig.nodes.include.access ? `
             <div class="field">
               <label for="accessSelect">${t('labels.access')}</label>
@@ -2212,6 +2550,8 @@ function renderDetails() {
           const inputId = `edgeMeasure_${e.id}_${isTail ? 'tail' : 'head'}`;
           const matId = `edgeMaterial_${e.id}`;
           const diamSelectId = `edgeDiameterSelect_${e.id}`;
+          const fallDepthId = `edgeFallDepth_${e.id}`;
+          const fallTypeGroup = `edgeFallType_${e.id}`;
           const materialOptions = edgeMaterialOptionLabels.map((m) => `<option value="${escapeHtml(m)}" ${e.material === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
           const currentDiameterIndex = diameterIndexFromCode(e.line_diameter);
           html += `
@@ -2230,6 +2570,12 @@ function renderDetails() {
                 ${diameterOptions.map((d) => `<option value="${escapeHtml(d.code)}" ${String(e.line_diameter)===String(d.code)?'selected':''}>${escapeHtml(d.label)}</option>`).join('')}
               </select>
             </div>
+            ${adminConfig.edges.include.fall_depth ? `
+            <div class="field">
+              <label for="${fallDepthId}">${t('labels.fallDepth')}</label>
+              <input id="${fallDepthId}" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="${escapeHtml(e.fall_depth || '')}" placeholder="${t('labels.optional')}" dir="auto" />
+            </div>` : ''}
+            ${adminConfig.edges.include.fall_type ? buildFallTypeHtml(fallTypeGroup, e) : ''}
           `;
         });
         html += '</div></div>';
@@ -2243,9 +2589,23 @@ function renderDetails() {
           const inputId = `edgeMeasure_${e.id}_${isTail ? 'tail' : 'head'}`;
           const matId = `edgeMaterial_${e.id}`;
           const diamSelectId = `edgeDiameterSelect_${e.id}`;
+          const fallDepthId = `edgeFallDepth_${e.id}`;
+          const fallTypeGroup = `edgeFallType_${e.id}`;
           const measureInput = container.querySelector(`#${CSS.escape(inputId)}`);
           const materialSelect = container.querySelector(`#${CSS.escape(matId)}`);
           const diameterSelect = container.querySelector(`#${CSS.escape(diamSelectId)}`);
+          const fallDepthInputRow = container.querySelector(`#${CSS.escape(fallDepthId)}`);
+          if (fallDepthInputRow) {
+            fallDepthInputRow.addEventListener('input', (ev) => {
+              const raw = String(ev.target.value || '');
+              const sanitized = sanitizeMeasurement(raw);
+              if (sanitized !== raw) ev.target.value = sanitized;
+              e.fall_depth = sanitized;
+              debouncedSaveToStorage();
+              scheduleDraw();
+            });
+          }
+          wireFallType(container, fallTypeGroup, fallDepthInputRow, e);
 
           if (measureInput) {
             const setHighlight = () => { highlightedHalfEdge = { edgeId: e.id, half: isTail ? 'tail' : 'head' }; scheduleDraw(); };
@@ -2362,6 +2722,15 @@ function renderDetails() {
         scheduleDraw();
       });
     }
+    // Shaft material listener
+    const manholeMaterialSelect = container.querySelector('#manholeMaterialSelect');
+    if (manholeMaterialSelect) {
+      manholeMaterialSelect.addEventListener('change', (e) => {
+        node.manholeMaterial = e.target.value;
+        saveToStorage();
+        scheduleDraw();
+      });
+    }
     // Cover diameter selection listener
     const coverDiameterInput = container.querySelector('#coverDiameterInput');
     if (coverDiameterInput) {
@@ -2458,14 +2827,6 @@ function renderDetails() {
       const idx = (adminConfig.edges?.options?.material ? list.map(o=>o.label) : EDGE_MATERIALS).indexOf(label);
       return idx >= 0 ? idx : 0;
     };
-    // Build dropdown options for edge type
-    let edgeTypeOptions = '';
-    const edgeTypeOptionLabels = (adminConfig.edges?.options?.edge_type ?? EDGE_TYPE_OPTIONS)
-      .filter(o => (o.enabled !== false))
-      .map(o => o.label || o);
-    edgeTypeOptionLabels.forEach((et) => {
-      edgeTypeOptions += `<option value="${escapeHtml(et)}" ${edge.edge_type === et ? 'selected' : ''}>${escapeHtml(et)}</option>`;
-    });
     // Engineering status options for edge
     const edgeEngineeringOptions = (adminConfig.edges?.options?.engineering_status ?? EDGE_ENGINEERING_STATUS)
       .map(({ code, label }) => `<option value="${escapeHtml(code)}" ${Number(edge.engineeringStatus)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
@@ -2492,10 +2853,7 @@ function renderDetails() {
 
       <div class="details-section">
         <div class="details-grid two-col">
-          <div class="field">
-            <label for="edgeTypeSelect">${t('labels.edgeType')}</label>
-            <select id="edgeTypeSelect">${edgeTypeOptions}</select>
-          </div>
+          ${buildEdgeTypeHtml('edgeType', edge)}
           ${adminConfig.edges.include.engineering_status ? `
           <div class="field">
             <label for="edgeEngineeringStatusSelect">${t('labels.engineeringStatus')}</label>
@@ -2516,7 +2874,7 @@ function renderDetails() {
         </div>
       </div>
 
-      ${(adminConfig.edges.include.fall_depth || adminConfig.edges.include.fall_position) ? `
+      ${(adminConfig.edges.include.fall_depth || adminConfig.edges.include.fall_type) ? `
       <div class="details-section">
         <div class="details-grid two-col">
           ${adminConfig.edges.include.fall_depth ? `
@@ -2524,17 +2882,7 @@ function renderDetails() {
             <label for="fallDepthInput">${t('labels.fallDepth')}</label>
             <input id="fallDepthInput" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="${escapeHtml(edge.fall_depth || '')}" placeholder="${t('labels.optional')}" dir="auto" />
           </div>` : ''}
-          ${adminConfig.edges.include.fall_position ? `
-          <div class="field">
-            <label for="fallPositionSelect">${t('labels.fallPosition')}</label>
-            <select id="fallPositionSelect">
-              <option value="" ${edge.fall_position===''?'selected':''}>${t('labels.optional')}</option>
-              ${(adminConfig.edges?.options?.fall_position || [{code:0,label:'פנימי'},{code:1,label:'חיצוני'}])
-                .filter(o => (o.enabled !== false))
-                .map(({code,label}) => `<option value="${escapeHtml(code)}" ${Number(edge.fall_position)===Number(code)?'selected':''}>${escapeHtml(label)}</option>`)
-                .join('')}
-            </select>
-          </div>` : ''}
+          ${adminConfig.edges.include.fall_type ? buildFallTypeHtml('edgeFallType', edge) : ''}
         </div>
       </div>` : ''}
 
@@ -2554,6 +2902,14 @@ function renderDetails() {
         </div>
       </div>` : ''}
 
+      ${adminConfig.edges.include.note ? `
+      <div class="details-section">
+        <div class="field">
+          <label for="edgeNoteInput">${t('labels.edgeNote')}</label>
+          <textarea id="edgeNoteInput" rows="2" placeholder="${t('labels.edgeNotePlaceholder')}" dir="auto">${escapeHtml(edge.note || '')}</textarea>
+        </div>
+      </div>` : ''}
+
       ${(headNode && headNode.note) ? `
       <div class="details-section">
         <div class="field">
@@ -2568,21 +2924,23 @@ function renderDetails() {
     `;
     detailsContainer.appendChild(container);
     // Attach listeners
-    const edgeTypeSelect = container.querySelector('#edgeTypeSelect');
     const edgeMaterialSelect = container.querySelector('#edgeMaterialSelect');
     const edgeDiameterSelect = container.querySelector('#edgeDiameterSelect');
     const edgeEngineeringStatusSelect = container.querySelector('#edgeEngineeringStatusSelect');
-    const fallPositionSelect = container.querySelector('#fallPositionSelect');
-    edgeTypeSelect.addEventListener('change', (e) => {
-      edge.edge_type = e.target.value;
-      saveToStorage();
-      scheduleDraw();
-    });
+
+    wireEdgeType(container, 'edgeType', edge);
     edgeMaterialSelect.addEventListener('change', (e) => {
       edge.material = e.target.value;
       saveToStorage();
       scheduleDraw();
     });
+    const edgeNoteInput = container.querySelector('#edgeNoteInput');
+    if (edgeNoteInput) {
+      edgeNoteInput.addEventListener('input', (e) => {
+        edge.note = e.target.value;
+        debouncedSaveToStorage();
+      });
+    }
     if (edgeDiameterSelect) {
       edgeDiameterSelect.addEventListener('change', (e) => {
         edge.line_diameter = String(e.target.value || '');
@@ -2596,14 +2954,6 @@ function renderDetails() {
         edge.engineeringStatus = Number.isFinite(num) ? num : 0;
         saveToStorage();
         scheduleDraw();
-      });
-    }
-    if (fallPositionSelect) {
-      fallPositionSelect.addEventListener('change', (e) => {
-        const raw = e.target.value;
-        const num = Number(raw);
-        edge.fall_position = raw === '' || !Number.isFinite(num) ? '' : num;
-        saveToStorage();
       });
     }
     const tailInput = container.querySelector('#tailInput');
@@ -2638,6 +2988,7 @@ function renderDetails() {
         scheduleDraw();
       });
     }
+    wireFallType(container, 'edgeFallType', fallDepthInput, edge);
     if (fallDepthInput) {
       fallDepthInput.addEventListener('input', (e) => {
       // Store the value, allowing partial decimals like "3." while typing
@@ -2880,7 +3231,7 @@ function pointerDown(x, y) {
     }
   }
   // Contextual edit: in Node/Home/Drainage mode, allow selecting and dragging existing nodes when clicking on them
-  if ((currentMode === 'node' || currentMode === 'home') && node) {
+  if ((currentMode === 'node' || currentMode === 'home' || currentMode === 'direction') && node) {
     // Toggle close if clicking the same node again
     if (selectedNode && String(selectedNode.id) === String(node.id)) {
       selectedNode = null;
@@ -2908,6 +3259,13 @@ function pointerDown(x, y) {
     const created = createNode(world.x, world.y);
     // Do not enter edit mode or open details; Node mode is for placement only
     scheduleDraw();
+  } else if (currentMode === 'direction') {
+    const created = applyDirectionPreset(createNode(world.x, world.y));
+    selectedNode = created;
+    saveToStorage();
+    draw();
+    renderDetails();
+    showToast(t('toasts.directionCreated'));
   } else if (currentMode === 'home') {
     const created = createNode(world.x, world.y);
     // Switch the created node to Home type but keep numeric ID (like manholes/drainage)
@@ -2989,7 +3347,7 @@ canvas.addEventListener('mousedown', (e) => {
       } else {
         // Empty background: prepare to either pan (if moved) or create node on release (node/home/drainage modes)
         mousePanCandidate = true;
-        mouseAddPending = (currentMode === 'node' || currentMode === 'home');
+        mouseAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction');
         mouseAddPoint = { x: e.offsetX, y: e.offsetY };
         panStart = { x: e.clientX, y: e.clientY };
         translateStart = { ...viewTranslate };
@@ -3063,7 +3421,7 @@ canvas.addEventListener('touchstart', (e) => {
       pinchStartDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       pinchStartScale = viewScale;
       const centerScreen = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      pinchCenterWorld = screenToWorld(centerScreen.x, centerScreen.y);
+      pinchCenterWorld = screenToDisplay(centerScreen.x, centerScreen.y);
     } else {
       const touch = e.touches[0];
       const x = touch.clientX - rect.left;
@@ -3156,7 +3514,7 @@ canvas.addEventListener('touchstart', (e) => {
         } else {
           // Background: candidate for panning or tap-to-add on release
           touchPanCandidate = true;
-          touchAddPending = (currentMode === 'node' || currentMode === 'home');
+          touchAddPending = (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction');
           touchAddPoint = { x, y };
         }
       }
@@ -3237,7 +3595,7 @@ canvas.addEventListener('touchend', (e) => {
   }
   if (e.touches.length === 0) {
     // If a tap-to-add is pending and didn't move much, create node now (Node or Home or Drainage mode)
-    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home') && !isDragging) {
+    if (touchAddPending && touchAddPoint && (currentMode === 'node' || currentMode === 'home' || currentMode === 'direction') && !isDragging) {
       const world = screenToWorld(touchAddPoint.x, touchAddPoint.y);
       // Re-check proximity with touch-friendly thresholds to avoid creating next to an existing node/edge
       const nearNode = findNodeAtWithExpansion(world.x, world.y, TOUCH_SELECT_EXPANSION);
@@ -3247,6 +3605,10 @@ canvas.addEventListener('touchend', (e) => {
         if (currentMode === 'home' && created) {
           // Keep numeric ID for home (like manholes)
           created.nodeType = 'Home';
+        } else if (currentMode === 'direction' && created) {
+          applyDirectionPreset(created);
+          saveToStorage();
+          showToast(t('toasts.directionCreated'));
         }
         scheduleDraw();
       }
@@ -3277,13 +3639,7 @@ newSketchBtn.addEventListener('click', () => {
   pendingEdgeTail = null;
   pendingEdgePreview = null;
   // Reset modes to node creation by default
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-  selectedNode = null;
-  selectedEdge = null;
-  renderDetails();
+  setMode('node');
   // Reset date input to today by default
   dateInput.value = new Date().toISOString().substr(0, 10);
   startPanel.style.display = 'flex';
@@ -3306,12 +3662,7 @@ startBtn.addEventListener('click', () => {
   }
   newSketch(dateVal);
   // Reset mode and button states on new sketch
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-  selectedNode = null;
-  selectedEdge = null;
+  setMode('node');
   startPanel.style.display = 'none';
   showToast(t('toasts.createdNew'));
 });
@@ -3325,51 +3676,32 @@ if (cancelBtn) {
   });
 }
 
-// Mode selection buttons
+// Mode selection buttons.
+//
+// There are now two line buttons — one per line type — so the "clear the other
+// three buttons" dance is done once here instead of being copied per handler,
+// which is how the home button came to leave the edge button lit.
 if (nodeModeBtn) {
-  nodeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'node';
-    nodeModeBtn.classList.add('active');
-    if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('toasts.nodeMode'));
-  });
+  nodeModeBtn.addEventListener('click', () => setMode('node', { toast: t('toasts.nodeMode') }));
 }
 if (homeNodeModeBtn) {
-  homeNodeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'home';
-    homeNodeModeBtn.classList.add('active');
-    if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (edgeModeBtn) edgeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('home'));
-  });
+  homeNodeModeBtn.addEventListener('click', () => setMode('home', { toast: t('home') }));
+}
+if (directionModeBtn) {
+  directionModeBtn.addEventListener('click', () =>
+    setMode('direction', { toast: t('toasts.directionMode') }));
 }
 if (edgeModeBtn) {
-  edgeModeBtn.addEventListener('click', () => {
-    commitIdInputIfFocused();
-    currentMode = 'edge';
-    edgeModeBtn.classList.add('active');
-    if (nodeModeBtn) nodeModeBtn.classList.remove('active');
-    if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-    pendingEdgeTail = null;
-    pendingEdgePreview = null;
-    selectedNode = null;
-    selectedEdge = null;
-    renderDetails();
-    showToast(t('toasts.edgeMode'));
-  });
+  edgeModeBtn.addEventListener('click', () => setMode('edge', {
+    edgeType: EDGE_TYPES[0],
+    toast: t('toasts.edgeModePrimary'),
+  }));
+}
+if (edgeSecondaryModeBtn) {
+  edgeSecondaryModeBtn.addEventListener('click', () => setMode('edge', {
+    edgeType: EDGE_TYPES[1],
+    toast: t('toasts.edgeModeSecondary'),
+  }));
 }
 // Zoom buttons
 if (zoomInBtn) {
@@ -3489,6 +3821,8 @@ if (importSketchBtn && importSketchFile) {
       // Load the imported sketch
       nodes = importedSketch.nodes;
       edges = importedSketch.edges;
+      schemaVersion = migrateGraph(nodes, edges, importedSketch.schemaVersion);
+      reportSchemaMigration();
       nextNodeId = importedSketch.nextNodeId;
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
@@ -3611,26 +3945,12 @@ if (sketchListEl) {
   });
 }
 
-// Save button and autosave toggle
+// Save button. Saving happens on every change anyway; this stays because a
+// surveyor finishing a manhole wants to see something say so.
 if (saveBtn) {
   saveBtn.addEventListener('click', () => {
-    const before = autosaveEnabled;
-    autosaveEnabled = false; // avoid double-save side effects
-    saveToLibrary();
-    autosaveEnabled = before;
     saveToStorage();
     showToast(t('toasts.saved'));
-  });
-}
-if (autosaveToggle) {
-  const savedPref = localStorage.getItem('graphSketch.autosave');
-  if (savedPref !== null) autosaveEnabled = savedPref === 'true';
-  autosaveToggle.checked = autosaveEnabled;
-  autosaveToggle.addEventListener('change', () => {
-    autosaveEnabled = !!autosaveToggle.checked;
-    localStorage.setItem('graphSketch.autosave', String(autosaveEnabled));
-    showToast(autosaveEnabled ? t('toasts.autosaveOn') : t('toasts.autosaveOff'));
-    if (autosaveEnabled) saveToLibrary();
   });
 }
 
@@ -3683,10 +4003,16 @@ if (mobileSizeDecreaseBtn) {
   mobileSizeDecreaseBtn.addEventListener('click', decreaseSizeScale);
 }
 
-// Help modal controls
-if (helpBtn && helpModal) {
+// Help: the six-line shortcut dialog was replaced by the field guide. Loaded
+// on demand so its content and figures cost nothing until someone asks for it.
+if (helpBtn) {
   helpBtn.addEventListener('click', () => {
-    helpModal.style.display = 'flex';
+    import('../help/help-screen.js')
+      .then((m) => m.openHelp())
+      .catch((err) => {
+        console.warn('field guide failed to load', err);
+        if (helpModal) helpModal.style.display = 'flex';   // fall back to the old dialog
+      });
   });
 }
 if (closeHelpBtn && helpModal) {
@@ -3797,22 +4123,6 @@ if (mobileSaveBtn && saveBtn) {
     saveBtn.click();
   });
 }
-// Autosave toggle: keep both toggles in sync and dispatch change on original toggle
-if (mobileAutosaveToggle && autosaveToggle) {
-  // Initialize mobile toggle to match saved preference
-  mobileAutosaveToggle.checked = autosaveToggle.checked;
-  // When mobile toggle changes, propagate to desktop toggle
-  mobileAutosaveToggle.addEventListener('change', () => {
-    autosaveToggle.checked = mobileAutosaveToggle.checked;
-    // Trigger change event on desktop toggle
-    autosaveToggle.dispatchEvent(new Event('change'));
-    closeMobileMenu();
-  });
-  // When desktop toggle changes (e.g. via settings), update mobile toggle
-  autosaveToggle.addEventListener('change', () => {
-    mobileAutosaveToggle.checked = autosaveToggle.checked;
-  });
-}
 // Language selector sync
 if (mobileLangSelect && langSelect) {
   // Initialize to current value
@@ -3843,26 +4153,21 @@ document.addEventListener('keydown', (e) => {
 
   // Mode toggles
   if (!isTyping && (e.key === 'n' || e.key === 'N')) {
-    if (nodeModeBtn && edgeModeBtn) {
-      nodeModeBtn.click();
-      e.preventDefault();
-    } else {
-      currentMode = 'node';
-      pendingEdgeTail = null;
-      pendingEdgePreview = null;
-      showToast(t('toasts.nodeMode'));
-    }
+    setMode('node', { toast: t('toasts.nodeMode') });
+    e.preventDefault();
   }
   if (!isTyping && (e.key === 'e' || e.key === 'E')) {
-    if (edgeModeBtn && nodeModeBtn) {
-      edgeModeBtn.click();
-      e.preventDefault();
-    } else {
-      currentMode = 'edge';
-      pendingEdgeTail = null;
-      pendingEdgePreview = null;
-      showToast(t('toasts.edgeMode'));
-    }
+    // E enters line mode on קו ראשי; pressing it again while already in line
+    // mode flips to the other type, so one key still reaches both without
+    // asking anyone to memorise a second letter.
+    const nextType = (currentMode === 'edge' && currentEdgeType === EDGE_TYPES[0])
+      ? EDGE_TYPES[1]
+      : EDGE_TYPES[0];
+    setMode('edge', {
+      edgeType: nextType,
+      toast: nextType === EDGE_TYPES[1] ? t('toasts.edgeModeSecondary') : t('toasts.edgeModePrimary'),
+    });
+    e.preventDefault();
   }
   if (!isTyping && (e.key === 's' || e.key === 'S')) {
     // Manual save
@@ -3964,7 +4269,7 @@ canvas.addEventListener('wheel', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
-  const focusWorld = screenToWorld(mouseX, mouseY);
+  const focusWorld = screenToDisplay(mouseX, mouseY);
   const delta = e.deltaY;
   const newScale = delta > 0 ? (viewScale / SCALE_STEP) : (viewScale * SCALE_STEP);
   const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
@@ -3980,11 +4285,29 @@ canvas.addEventListener('wheel', (e) => {
 /**
  * Convert screen space (canvas client) coords to world coords (pre-zoom space).
  */
-function screenToWorld(x, y) {
+/**
+ * Screen -> display space: undoes pan and zoom only.
+ *
+ * This is the space viewTranslate and viewScale operate in, so it is the one to
+ * anchor a zoom against. It is NOT where the nodes live once the sketch is
+ * rotated — use screenToWorld for anything that has to match a node.
+ */
+function screenToDisplay(x, y) {
   return {
     x: (x - viewTranslate.x) / viewScale,
     y: (y - viewTranslate.y) / viewScale,
   };
+}
+
+/**
+ * Screen -> sketch space: undoes pan, zoom and the orientation.
+ *
+ * Hit-testing, dragging and node creation all work in sketch coordinates and
+ * need no knowledge of how the view is turned.
+ */
+function screenToWorld(x, y) {
+  const d = screenToDisplay(x, y);
+  return sketchView.fromDisplay(d.x, d.y);
 }
 
 /**
@@ -3996,7 +4319,8 @@ function setZoom(newScale) {
   // Zoom centered on canvas center
   const rect = canvas.getBoundingClientRect();
   const centerScreen = { x: rect.width / 2, y: rect.height / 2 };
-  const centerWorld = screenToWorld(centerScreen.x, centerScreen.y);
+  // Display space: this value is about to be multiplied by viewScale.
+  const centerWorld = screenToDisplay(centerScreen.x, centerScreen.y);
   viewScale = clamped;
   viewTranslate.x = centerScreen.x - viewScale * centerWorld.x;
   viewTranslate.y = centerScreen.y - viewScale * centerWorld.y;
@@ -4032,7 +4356,8 @@ function getSketchCenter() {
 function recenterView() {
   const rect = canvas.getBoundingClientRect();
   const centerScreen = { x: rect.width / 2, y: rect.height / 2 };
-  const centerWorld = getSketchCenter();
+  const c = getSketchCenter();
+  const centerWorld = sketchView.toDisplay(c.x, c.y);
   viewTranslate.x = centerScreen.x - viewScale * centerWorld.x;
   viewTranslate.y = centerScreen.y - viewScale * centerWorld.y;
   scheduleDraw();
@@ -4042,6 +4367,48 @@ function recenterView() {
 if (recenterBtn) {
   recenterBtn.addEventListener('click', () => {
     try { recenterView(); } catch (_) {}
+  });
+}
+
+/**
+ * Reflect the current orientation in the controls.
+ *
+ * The slider is the readout as well as the input, so it has to be written back
+ * whenever the angle changes from anywhere other than the slider itself.
+ */
+function updateOrientationControls() {
+  const o = sketchView.getOrientation();
+  if (rotationValue) rotationValue.textContent = `${Math.round(o.degrees)}\u00B0`;
+  if (rotationSlider && Number(rotationSlider.value) !== Math.round(o.degrees)) {
+    rotationSlider.value = String(Math.round(o.degrees));
+  }
+  if (flipHorizontalBtn) flipHorizontalBtn.classList.toggle('active', o.flipped);
+  if (orientationGroupEl) orientationGroupEl.classList.toggle('is-reoriented', sketchView.isReoriented());
+}
+
+const orientationGroupEl = document.getElementById('orientationGroup');
+
+if (rotationSlider) {
+  // 'input' rather than 'change': the drawing follows the handle as it moves,
+  // which is the whole point of a free angle — you aim it by eye.
+  rotationSlider.addEventListener('input', () => {
+    sketchView.setRotation(Number(rotationSlider.value));
+    updateOrientationControls();
+    // Recentre while dragging would fight the handle, so only redraw here.
+    scheduleDraw();
+  });
+  // Framing is corrected once, when the handle is let go.
+  const settle = () => { try { recenterView(); } catch (_) { scheduleDraw(); } };
+  rotationSlider.addEventListener('change', settle);
+  rotationSlider.addEventListener('pointerup', settle);
+}
+
+if (flipHorizontalBtn) {
+  flipHorizontalBtn.addEventListener('click', () => {
+    sketchView.flipHorizontal();
+    updateOrientationControls();
+    try { recenterView(); } catch (_) { scheduleDraw(); }
+    showToast(t('toasts.orientationFlip', sketchView.getOrientation().flipped));
   });
 }
 
@@ -4135,7 +4502,7 @@ async function init() {
   try { await restoreFromIndexedDbIfNeeded(); } catch (_) {}
   // Set default date input to today
   dateInput.value = new Date().toISOString().substr(0, 10);
-  migrateSingleSketchToLibraryIfNeeded();
+  ensureCurrentSketchInLibrary();
   // Language init
   const savedLang = localStorage.getItem('graphSketch.lang');
   if (savedLang === 'en' || savedLang === 'he') currentLang = savedLang; else currentLang = 'he';
@@ -4158,10 +4525,8 @@ async function init() {
     if (rec && rec.name) currentSketchName = rec.name;
   }
   // Default interaction mode is node creation
-  currentMode = 'node';
-  if (nodeModeBtn) nodeModeBtn.classList.add('active');
-  if (homeNodeModeBtn) homeNodeModeBtn.classList.remove('active');
-  if (edgeModeBtn) edgeModeBtn.classList.remove('active');
+  setMode('node');
+  updateOrientationControls();
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
   renderDetails();
@@ -4173,6 +4538,12 @@ init();
 if (window.matchMedia) {
   const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
   darkModeQuery.addEventListener('change', () => {
+    // Update the CSS colours here rather than leaving it to the redraw. They are
+    // written as inline custom properties, so they outrank the stylesheet's
+    // media query — if the theme flips while the tab is hidden no frame is
+    // rendered, and the toolbar and legend would keep the old theme's colours
+    // until something else triggered a draw.
+    syncEdgeTypeCssVars();
     scheduleDraw();
   });
 }

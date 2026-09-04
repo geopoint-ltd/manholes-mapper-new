@@ -16,7 +16,23 @@
 // the network was unavailable and there was no cached response, causing
 // offline pages to break.  Increasing the version here forces browsers
 // to pick up the updated logic.
-const APP_VERSION = 'v13';
+// v23 (2026-08-30): קו ראשי drawn in red.
+// v22 (2026-08-30): direction arrow made legible.
+// v21 (2026-08-30): direction-point node type; desktop details panel full height.
+// v20 (2026-08-30): zoom anchors in display space again.
+// v19 (2026-08-30): free-angle rotation slider, single mirror.
+// v18 (2026-08-30): sketch rotate/mirror. main.js and styles.css are served
+// stale-while-revalidate from a cache keyed by this constant, so a release that
+// changes only them reaches nobody until it is bumped.
+// v17 (2026-08-28): field guide scrolls properly again.
+// v16 (2026-08-28): line-type radios + selection highlight.
+// v15 (2026-08-28): bumped to ship the two line types / DB domain fix to field
+// devices the same day. A bump changes this file's bytes, which is the only
+// thing browsers treat as an update — reg.update() runs every 15 minutes, the
+// new worker calls skipWaiting() then clients.claim(), and register-sw.js
+// reloads the page on controllerchange. So every open device reloads within
+// ~15 minutes of the deploy, unprompted.
+const APP_VERSION = 'v23';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
@@ -34,11 +50,19 @@ const OFFLINE_URL = withBase('offline.html');
 // files are handled dynamically via the runtime caching logic below; they don't need to be
 // listed here explicitly. Keeping this list lean reduces churn across builds and avoids
 // broken cache entries when filenames change.
+// NOTE: styles.css is deliberately NOT precached.
+//
+// Everything in this list is served cache-first and never refreshed until
+// APP_VERSION changes. styles.css used to be here, which meant a stylesheet
+// shipped in v13 was pinned on every device that had ever opened the app —
+// so a CSS-only release was invisible to existing users no matter how many
+// times they reloaded. It now falls through to stale-while-revalidate at the
+// bottom of the fetch handler: still cached for offline use after the first
+// load, but picked up on the visit after a deploy.
 const PRECACHE_ASSETS = [
   withBase('index.html'),
   OFFLINE_URL,
   withBase('manifest.json'),
-  withBase('styles.css'),
   withBase('app_icon.png'),
   withBase('health/index.html')
 ];

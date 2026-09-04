@@ -15,6 +15,8 @@ const COLORS_LIGHT = {
     fillMissing: '#fb923c',   // orange-400 (more orange)
     fillSelectedMissing: '#fed7aa', // orange-200 (richer than 100)
     fillBlocked: '#cbd5e1',   // slate-300
+    fillDirection: '#475569', // slate-600 (נקודת כיוון — dark, so the arrow reads)
+    directionInk: '#ffffff',  // the arrow itself
     fillSelected: '#bfdbfe',  // blue-200 (richer than 100)
     fillDrainageComplete: '#0ea5e9', // sky-500 (drainage node when complete)
     stroke: '#2563eb',        // blue-600
@@ -26,13 +28,9 @@ const COLORS_LIGHT = {
     badgeIcon: '#ffffff',     // white (badge icon)
   },
   edge: {
-    typePrimary: '#2563eb',   // blue-600
-    typeSecondary: '#0d9488', // teal-600
-    typeDrainage: '#fb923c',  // orange-400 (drainage line)
+    typePrimary: '#dc2626',   // red-600 (קו ראשי)
+    typeSecondary: '#0d9488', // teal-600 (קו משני)
     selected: '#7c3aed',      // violet-600
-    selectedPrimary: '#60a5fa', // blue-400 (selected primary)
-    selectedDrainage: '#fdba74', // orange-300 (selected drainage)
-    selectedSecondary: '#86efac', // green-300 (selected secondary)
     preview: '#94a3b8',       // slate-400
     label: '#334155',         // slate-700 (dark text for light mode)
     labelStroke: '#ffffff',   // white stroke for light mode
@@ -53,6 +51,8 @@ const COLORS_DARK = {
     fillMissing: '#fb923c',   // orange-400
     fillSelectedMissing: '#fed7aa', // orange-200
     fillBlocked: '#475569',   // slate-600 (darker for dark mode)
+    fillDirection: '#94a3b8', // slate-400 (נקודת כיוון — light, against the dark canvas)
+    directionInk: '#0f172a',  // the arrow itself
     fillSelected: '#3b82f6',  // blue-500 (more vibrant for dark mode)
     fillDrainageComplete: '#38bdf8', // sky-400 (brighter drainage node for dark mode)
     stroke: '#60a5fa',        // blue-400 (lighter stroke for dark mode)
@@ -64,13 +64,9 @@ const COLORS_DARK = {
     badgeIcon: '#f0fdf4',     // green-50 (light badge icon for dark mode)
   },
   edge: {
-    typePrimary: '#60a5fa',   // blue-400 (lighter for dark mode)
-    typeSecondary: '#14b8a6', // teal-500 (lighter for dark mode)
-    typeDrainage: '#fb923c',  // orange-400 (drainage line - same for both modes)
+    typePrimary: '#f87171',   // red-400 (קו ראשי — lighter for dark mode)
+    typeSecondary: '#2dd4bf', // teal-400 (קו משני — lighter for dark mode)
     selected: '#a78bfa',      // violet-400 (lighter for dark mode)
-    selectedPrimary: '#93c5fd', // blue-300 (selected primary for dark mode)
-    selectedDrainage: '#fdba74', // orange-300 (selected drainage - same for both modes)
-    selectedSecondary: '#6ee7b7', // green-300 (selected secondary for dark mode)
     preview: '#94a3b8',       // slate-400
     label: '#f1f5f9',         // slate-100 (light text for dark mode)
     labelStroke: '#1e293b',   // slate-800 (dark stroke for dark mode)
@@ -98,7 +94,27 @@ export const NODE_TYPES = ['type1', 'type2'];
 export const NODE_TYPE_OPTIONS = [
   { value: 'Manhole', i18nKey: 'modeNode' },
   { value: 'Home', i18nKey: 'modeHome' },
+  { value: 'Direction', i18nKey: 'modeDirection' },
 ];
+
+/**
+ * What the כיוון button fills in.
+ *
+ * A direction point is not a surveyed manhole: it exists to show that the line
+ * carries on past the edge of today's work. רמת דיוק must therefore be
+ * סכימטית — left at הנדסית it loads as a real manhole with a precise position
+ * nobody measured, which is one of the two mistakes the field guide calls out.
+ * Everything else is "not known", because nobody looked.
+ */
+export const DIRECTION_NODE_DEFAULTS = {
+  note: 'כיוון',
+  accuracyLevel: 5,      // סכימטית
+  maintenanceStatus: 0,  // לא ידוע
+  material: 'לא ידוע',
+  manholeMaterial: 'לא ידוע',
+  access: 0,             // לא ידוע
+  coverDiameter: '',
+};
 
 export const NODE_MATERIAL_OPTIONS = [
   { code: 0, label: 'לא ידוע' },
@@ -116,6 +132,10 @@ export const NODE_MATERIAL_OPTIONS = [
   { code: 13, label: 'שוחת PVC' },
   { code: 9, label: 'אבו' },
 ];
+
+// Shaft material (ManholeMat / חומר שוחה). Same Material domain as the cover
+// material, but a distinct field: one describes the chamber, the other the lid.
+export const NODE_MANHOLE_MATERIAL_OPTIONS = NODE_MATERIAL_OPTIONS.map((o) => ({ ...o }));
 
 export const NODE_COVER_DIAMETERS = ['לא ידוע', '35', '45', '55', '65'];
 
@@ -154,10 +174,13 @@ export const NODE_MAINTENANCE_OPTIONS = [
   { code: 14, label: 'אחר' },
 ];
 
-// Accuracy level for nodes (0 = Engineering, 1 = Schematic)
+// Accuracy level for nodes. Codes match the AccuracyLe domain in the
+// geodatabase (1/3/5), so an exported CSV drops straight in. Sketches captured
+// before this used 0/1 and are remapped on load — see utils/schema-migration.js.
 export const NODE_ACCURACY_OPTIONS = [
-  { code: 0, label: 'הנדסית' },
-  { code: 1, label: 'סכימטית' },
+  { code: 1, label: 'הנדסית' },
+  { code: 3, label: 'בינונית' },
+  { code: 5, label: 'סכימטית' },
 ];
 
 export const EDGE_MATERIAL_OPTIONS = [
@@ -177,30 +200,77 @@ export const EDGE_MATERIAL_OPTIONS = [
   { code: 9, label: 'אבו' },
 ];
 
+// Fall type (FallType / סוג מפל). Replaces the earlier fall_position field;
+// its two values map onto 2 (external) and 3 (internal) here.
+// Labels drop the word מפל: the field is already titled "סוג מפל", so repeating
+// it in every option only made the chips wide enough to wrap on a phone. The
+// codes are what the CSV carries, so this is presentation only.
+export const EDGE_FALL_TYPE_OPTIONS = [
+  { code: 0, label: 'לא ידוע' },
+  { code: 1, label: 'ירידה חופשית' },
+  { code: 2, label: 'חיצוני' },
+  { code: 3, label: 'פנימי' },
+];
+
 export const EDGE_LINE_DIAMETERS = [
   '10','25','26','50','75','100','150','160','200','250','300','350','400','500','600','650','700','800','900','1000','1250','1500','1800','2000'
 ];
 
-export const EDGE_TYPES = ['קו ראשי', 'קו סניקה', 'קו משני'];
-
-export const EDGE_TYPE_COLORS = {
-  'קו ראשי': COLORS.edge.typePrimary,
-  'קו סניקה': COLORS.edge.typeDrainage,
-  'קו משני': COLORS.edge.typeSecondary,
-};
-
-// Colors used when an edge is selected: slightly lighter variant per edge type
-export const EDGE_TYPE_SELECTED_COLORS = {
-  'קו ראשי': COLORS.edge.selectedPrimary,
-  'קו סניקה': COLORS.edge.selectedDrainage,
-  'קו משני': COLORS.edge.selectedSecondary,
-};
-
+// Line type (LineSubtyp / סיווג תפקוד). The codes are the geodatabase
+// domain LineSubType_1 verbatim — 4801 קו ראשי / 4802 קו משני / 4803 קו סניקה —
+// so an exported CSV drops straight into SW_Pipe_C without a translation step.
+//
+// The app used to send 4802 for קו סניקה and 4803 for קו משני, which is the
+// domain read backwards. Every pipe loaded so far is 4801, so nothing in the
+// geodatabase carries the old meaning.
+//
+// קו סניקה (4803) is deliberately absent: this survey is wastewater only, and a
+// pressure line there is rare enough that it belongs in the note rather than in
+// a type anyone can pick by accident. See REMOVED_EDGE_TYPE below.
 export const EDGE_TYPE_OPTIONS = [
   { code: 4801, label: 'קו ראשי' },
-  { code: 4802, label: 'קו סניקה' },
-  { code: 4803, label: 'קו משני' },
+  { code: 4802, label: 'קו משני' },
 ];
+
+export const EDGE_TYPES = EDGE_TYPE_OPTIONS.map((o) => o.label);
+
+/** Retired line type. Kept only so old sketches can be recognised and converted. */
+export const REMOVED_EDGE_TYPE = {
+  label: 'קו סניקה',
+  code: 4803,
+  /** What a line of that type becomes when an old sketch is opened. */
+  replacement: 'קו ראשי',
+};
+
+/**
+ * Resolve a label -> color map against the theme in force right now.
+ *
+ * COLORS is a Proxy that reads the media query on every access, so a plain
+ * object literal would freeze whichever theme happened to be active when this
+ * module was first evaluated — and lines would keep their light-mode colors
+ * after the phone switched to dark. Reading through a Proxy keeps every lookup
+ * live, without touching the call sites that index these maps by label.
+ */
+function themeAwareColorMap(colorKeyByLabel) {
+  return new Proxy({}, {
+    get: (_t, label) => {
+      const key = colorKeyByLabel[label];
+      return key ? COLORS.edge[key] : undefined;
+    },
+    has: (_t, label) => label in colorKeyByLabel,
+    ownKeys: () => Object.keys(colorKeyByLabel),
+    getOwnPropertyDescriptor: (_t, label) => (
+      label in colorKeyByLabel
+        ? { enumerable: true, configurable: true, value: COLORS.edge[colorKeyByLabel[label]] }
+        : undefined
+    ),
+  });
+}
+
+export const EDGE_TYPE_COLORS = themeAwareColorMap({
+  'קו ראשי': 'typePrimary',
+  'קו משני': 'typeSecondary',
+});
 
 export const EDGE_ENGINEERING_STATUS = [
   { code: 0, label: 'לא ידוע' },
