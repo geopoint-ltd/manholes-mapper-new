@@ -910,7 +910,7 @@ input.floating-keyboard-active {
   height: 100%;
 }
 #startPanel { display: none; z-index: 10; }
-#homePanel { display: none; z-index: 12; }
+#homePanel { display: none; z-index: 180; /* above canvas chrome (140-160), below the header (200) */ }
 #helpModal { display: none; z-index: 20; }
 #adminModal { display: none; z-index: 22; }
 #startPanel .panel,
@@ -3051,7 +3051,7 @@ input.floating-keyboard-active {
 #homeHead h2 { margin: 0; }
 
 #homePanel #sketchList {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -3070,7 +3070,13 @@ input.floating-keyboard-active {
 #homeActions .btn { width: 100%; justify-content: center; min-height: 44px; }
 
 @media (max-width: 600px) {
-  #homePanel { align-items: stretch; justify-content: stretch; }
+  #homePanel {
+    align-items: stretch;
+    justify-content: stretch;
+    /* The navbar keeps drawing above this sheet, so anything in the first
+       3.5rem was invisible — including the title and the close button. */
+    top: 3.5rem;
+  }
   #homePanel .panel {
     width: 100%;
     max-width: none;
@@ -3089,3 +3095,14 @@ input.floating-keyboard-active {
     height: min(80vh, 900px);
   }
 }
+
+/* .btn-ghost is white-on-translucent-white — drawn for the blue header, and
+   invisible anywhere else. Every ghost button inside the home screen (the
+   close X, the sign-out icon) takes the surface palette instead. The tokens
+   flip with the theme, so this holds in dark mode too. */
+#homePanel .btn-ghost {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+#homePanel .btn-ghost:hover { background: var(--color-bg); color: var(--color-text); }

@@ -110,8 +110,11 @@
 }
 
 .cloud-badge {
-  display: inline-block;
-  padding: 1px 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 3px 8px;
   border-radius: 999px;
   font-size: 0.68rem;
   font-weight: 700;
@@ -331,7 +334,7 @@
   }
   .cloud-row__actions .btn {
     flex: 1 1 auto;
-    min-height: 40px;
+    min-height: 44px;
   }
 }
 
@@ -458,3 +461,43 @@
     border-radius: 0;
   }
 }
+
+/* ---------------- row send button + ghost buttons on panels ---------------- */
+
+/* Sending is the row's reason to exist; it dresses like the primary action
+   it is, everywhere the row renders. */
+.cloud-row__send,
+.cloud-row__send:hover {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.cloud-row__send .material-icons {
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Same white-ghost-on-white-surface problem as the home screen: .btn-ghost
+   was drawn for the blue header. Scope the surface palette onto every ghost
+   button the cloud layer renders on a panel. Tokens flip with the theme. */
+.cloud-panel .btn-ghost,
+.cloud-menu .btn-ghost,
+.cloud-home__who .btn-ghost {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.cloud-panel .btn-ghost:hover,
+.cloud-home__who .btn-ghost:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Tighter rhythm on the home action bar — the gap the office circled. */
+#homeActions { gap: 0.35rem; padding-top: 0.4rem; }
+#homeCloudActions .cloud-menu__hint { padding-bottom: 0; }

@@ -1471,13 +1471,13 @@ function renderHome() {
     const displayName = rec.name && String(rec.name).trim().length > 0 ? rec.name : null;
     const title = displayName || t('listTitle', rec.id.slice(-6), (rec.creationDate || rec.createdAt));
       item.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div>
-            <div class="sketch-title" data-id="${rec.id}" style="font-weight:bold;cursor:text;">${title}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="min-width:0;">
+            <div class="sketch-title" data-id="${rec.id}" style="font-weight:bold;cursor:text;word-break:break-word;">${title}</div>
             <div style="font-size:0.85rem;color:var(--color-muted);">${t('listUpdated', new Date(rec.updatedAt || rec.createdAt).toLocaleString())}</div>
             <div style="font-size:0.85rem;color:var(--color-muted);">${t('listCounts', (rec.nodes||[]).length, (rec.edges||[]).length)}</div>
           </div>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn" data-action="open" data-id="${rec.id}">${t('listOpen')}</button>
             <button class="btn" data-action="duplicate" data-id="${rec.id}">${t('listDuplicate')}</button>
             <button class="btn btn-danger" data-action="delete" data-id="${rec.id}">${t('listDelete')}</button>

@@ -367,7 +367,10 @@ function buildRowActions(sketchId) {
       <input type="checkbox" data-cloud="pick" ${selected.has(String(sketchId)) ? 'checked' : ''} />
     </label>
     ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
-    <button class="btn btn-sm" data-cloud="send">${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</button>
+    <button class="btn cloud-row__send" data-cloud="send">
+      <span class="material-icons" aria-hidden="true">cloud_upload</span>
+      <span>${escapeHtml(sent ? t('cloud.sendAgain') : t('cloud.sendSketch'))}</span>
+    </button>
     ${withFiles ? `<button class="btn btn-sm" data-cloud="attach">
       <span class="material-icons" style="font-size:16px">attach_file</span>
       <span>${escapeHtml(t('cloud.attach'))}</span>
