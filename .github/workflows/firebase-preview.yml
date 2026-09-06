@@ -66,7 +66,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: REPLACE-WITH-YOUR-FIREBASE-PROJECT-ID
+          projectId: manholes-mappers-new
           expires: 7d
 
       # This org pins workflow tokens to read-only, which can stop the action

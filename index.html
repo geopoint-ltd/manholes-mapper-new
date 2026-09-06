@@ -115,11 +115,34 @@
           </button>
         </div>
       </div>
-      <!-- Mobile only: toggle to open overflow menu (moved outside #controls so it remains visible on small screens) -->
-      <button id="mobileMenuBtn" class="btn btn-ghost" title="">
-        <span class="material-icons">menu</span>
-      </button>
+      <!-- Mobile only. Grouped so the two sit together at the edge of the
+           header instead of drifting apart across the free space. -->
+      <div id="headerActions">
+        <button id="mobileMenuBtn" class="btn btn-ghost" title="">
+          <span class="material-icons">menu</span>
+        </button>
+        <button id="mobileSearchBtn" class="btn btn-ghost" title="">
+          <span class="material-icons">search</span>
+        </button>
+      </div>
     </header>
+
+    <!-- Mobile only: the field the search icon reveals. It sits below the header
+         rather than inside it so a long manhole number cannot squeeze the logo. -->
+    <div id="mobileSearchBar" style="display:none;">
+      <span class="material-icons search-icon">search</span>
+      <input
+        id="mobileSearchBarInput"
+        type="text"
+        inputmode="numeric"
+        class="search-input"
+        placeholder=""
+        title=""
+      />
+      <button id="mobileSearchCloseBtn" class="btn btn-ghost" title="">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
 
     <!-- Mobile overflow menu. This menu is hidden on larger screens and shows a vertical list of actions on small screens. -->
     <div id="mobileMenu" class="mobile-menu" style="display:none;">
@@ -131,17 +154,6 @@
         <span class="material-icons">note_add</span>
         <span class="label"></span>
       </button>
-      <!-- Mobile search -->
-      <div class="search-container mobile-search" style="margin-top:0.4rem;">
-        <span class="material-icons search-icon">search</span>
-        <input 
-          id="mobileSearchNodeInput" 
-          type="text" 
-          placeholder="" 
-          title=""
-          class="search-input"
-        />
-      </div>
       <button id="mobileZoomOutBtn" class="btn" title="">
         <span class="material-icons">zoom_out</span>
         <span class="label"></span>
@@ -205,17 +217,6 @@
         </div>
         <div id="adminScreenContent" class="admin-content"></div>
         <div class="admin-actions">
-          <div class="admin-import-export">
-            <input id="adminScreenImportFile" type="file" accept="application/json,.json" style="display:none;" />
-            <button id="adminScreenImportBtn" class="btn btn-ghost">
-              <span class="material-icons">upload_file</span>
-              <span class="label">יבא הגדרות</span>
-            </button>
-            <button id="adminScreenExportBtn" class="btn btn-ghost">
-              <span class="material-icons">download</span>
-              <span class="label">יצא הגדרות</span>
-            </button>
-          </div>
           <div style="display:flex;gap:0.75rem;">
             <button id="adminScreenCancelBtn" class="btn btn-ghost">ביטול</button>
             <button id="adminScreenSaveBtn" class="btn btn-primary">שמור הגדרות</button>
@@ -277,9 +278,24 @@
         </div>
         <div id="homePanel" style="display: none;">
           <div class="panel">
-            <h2 id="homeTitle">השרטוטים שלי</h2>
-            <div id="sketchList" style="max-height:50vh;overflow:auto;margin-top:0.5rem;"></div>
-            <button id="createFromHomeBtn" class="btn btn-primary" style="margin-top: 0.7rem;">שרטוט חדש</button>
+            <div id="homeHead">
+              <h2 id="homeTitle">השרטוטים שלי</h2>
+              <button id="homeCloseBtn" class="btn btn-ghost" title="">
+                <span class="material-icons">close</span>
+              </button>
+            </div>
+            <!-- Filled by the cloud layer when signed in: who you are, sign out. -->
+            <div id="homeCloudHeader"></div>
+            <div id="sketchList"></div>
+            <div id="homeActions">
+              <!-- Filled by the cloud layer: send the selected sketches. -->
+              <div id="homeCloudActions"></div>
+              <button id="homeImportBtn" class="btn">
+                <span class="material-icons">upload</span>
+                <span class="label"></span>
+              </button>
+              <button id="createFromHomeBtn" class="btn btn-primary">שרטוט חדש</button>
+            </div>
           </div>
         </div>
         <div id="helpModal">
@@ -307,17 +323,6 @@
             </div>
             <div id="adminContent" class="admin-content"></div>
             <div class="admin-actions">
-              <div class="admin-import-export">
-                <input id="adminImportFile" type="file" accept="application/json,.json" style="display:none;" />
-                <button id="adminImportBtn" class="btn btn-ghost">
-                  <span class="material-icons">upload_file</span>
-                  <span class="label">יבא הגדרות</span>
-                </button>
-                <button id="adminExportBtn" class="btn btn-ghost">
-                  <span class="material-icons">download</span>
-                  <span class="label">יצא הגדרות</span>
-                </button>
-              </div>
               <div style="display:flex;gap:0.75rem;">
                 <button id="adminCancelBtn" class="btn btn-ghost">ביטול</button>
                 <button id="adminSaveBtn" class="btn btn-primary">שמור הגדרות</button>
