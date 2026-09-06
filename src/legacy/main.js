@@ -1226,10 +1226,6 @@ function applyLangToStaticUI() {
     searchNodeInput.placeholder = t('searchNode');
     searchNodeInput.title = t('searchNodeTitle');
   }
-  if (typeof mobileSearchNodeInput !== 'undefined' && mobileSearchNodeInput) {
-    mobileSearchNodeInput.placeholder = t('searchNode');
-    mobileSearchNodeInput.title = t('searchNodeTitle');
-  }
   if (typeof mobileSearchBarInput !== 'undefined' && mobileSearchBarInput) {
     mobileSearchBarInput.placeholder = t('searchNode');
     mobileSearchBarInput.title = t('searchNodeTitle');
@@ -4505,7 +4501,6 @@ function searchAndCenterNode(searchId) {
 
 // Search input handlers
 const searchNodeInput = document.getElementById('searchNodeInput');
-const mobileSearchNodeInput = document.getElementById('mobileSearchNodeInput');
 
 if (searchNodeInput) {
   searchNodeInput.addEventListener('keydown', (e) => {
@@ -4604,26 +4599,6 @@ if (mobileSearchBarInput) {
   });
 }
 
-if (mobileSearchNodeInput) {
-  mobileSearchNodeInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      searchAndCenterNode(mobileSearchNodeInput.value);
-      mobileSearchNodeInput.blur(); // Close mobile keyboard
-    }
-  });
-  
-  // Also trigger search on input change (debounced)
-  let mobileSearchTimeout;
-  mobileSearchNodeInput.addEventListener('input', (e) => {
-    clearTimeout(mobileSearchTimeout);
-    mobileSearchTimeout = setTimeout(() => {
-      if (mobileSearchNodeInput.value.trim()) {
-        searchAndCenterNode(mobileSearchNodeInput.value);
-      }
-    }, 500); // Wait 500ms after user stops typing
-  });
-}
 
 /**
  * Application entry point: set defaults, load persisted state, size canvas and render UI.

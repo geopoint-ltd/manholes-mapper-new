@@ -12,7 +12,7 @@ import {
   sendMemberPasswordReset,
   removeMember,
 } from '../firebase/users.js';
-import { listSubmittedSketches } from '../firebase/sketches.js';
+import { watchSubmittedSketches, listSubmittedSketches } from '../firebase/sketches.js';
 import { listAttachments, formatSize } from '../firebase/attachments.js';
 import { isStorageConfigured } from '../firebase/config.js';
 import { buildSketchZip, saveBlob, sketchDisplayName } from './sketch-zip.js';
@@ -134,44 +134,67 @@ async function refreshUsers() {
   }
 }
 
+/** Live subscription while the panel is open, so the office does not refresh. */
+let inboxUnsub = null;
+
+/** Drop the subscription — called when the panel closes. */
+export function stopInboxSubscription() {
+  if (inboxUnsub) {
+    try {
+      inboxUnsub();
+    } catch (_) {}
+  }
+  inboxUnsub = null;
+}
+
 async function renderInbox() {
   const list = el.querySelector('#cloudInboxList');
   list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.loading'))}</div>`;
+  stopInboxSubscription();
   try {
-    const sketches = await listSubmittedSketches();
-    inboxCache.clear();
-    sketches.forEach((s) => inboxCache.set(String(s.id), s));
-    if (!sketches.length) {
-      list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.inboxEmpty'))}</div>`;
-      return;
-    }
-    list.innerHTML = sketches
-      .map(
-        (s) => `
-        <div class="cloud-row">
-          <div class="cloud-row__main">
-            <div class="cloud-row__title">${escapeHtml(sketchDisplayName(s))}</div>
-            <div class="cloud-row__meta" dir="auto">
-              ${escapeHtml(s.ownerEmail || '')} ·
-              ${escapeHtml(t('cloud.nodes'))}: ${Number(s.nodeCount) || 0} ·
-              ${escapeHtml(t('cloud.lines'))}: ${Number(s.edgeCount) || 0} ·
-              ${escapeHtml(formatWhen(s.submittedAt))}
-            </div>
-            <div class="cloud-attach-list" data-files-for="${escapeHtml(s.ownerUid || '')}|${escapeHtml(s.id)}"></div>
-          </div>
-          <div class="cloud-row__actions">
-            <button class="btn btn-sm btn-primary" data-act="open" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.open'))}</button>
-            <button class="btn btn-sm" data-act="zip" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.download'))}</button>
-            ${isStorageConfigured() ? `<button class="btn btn-sm" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
-          </div>
-        </div>`
-      )
-      .join('');
+    inboxUnsub = await watchSubmittedSketches(
+      (sketches) => paintInbox(list, sketches),
+      (err) => {
+        list.innerHTML = `<div class="cloud-empty">${escapeHtml((err && err.message) || String(err))}</div>`;
+      }
+    );
   } catch (err) {
     // A missing composite index is the usual first-run failure; its message
     // carries the console link that creates it.
     list.innerHTML = `<div class="cloud-empty">${escapeHtml((err && err.message) || String(err))}</div>`;
   }
+}
+
+/** Draw the inbox from one snapshot. */
+function paintInbox(list, sketches) {
+  inboxCache.clear();
+  sketches.forEach((s) => inboxCache.set(String(s.id), s));
+  if (!sketches.length) {
+    list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.inboxEmpty'))}</div>`;
+    return;
+  }
+  list.innerHTML = sketches
+    .map(
+      (s) => `
+      <div class="cloud-row">
+        <div class="cloud-row__main">
+          <div class="cloud-row__title">${escapeHtml(sketchDisplayName(s))}</div>
+          <div class="cloud-row__meta" dir="auto">
+            ${escapeHtml(s.ownerEmail || '')} ·
+            ${escapeHtml(t('cloud.nodes'))}: ${Number(s.nodeCount) || 0} ·
+            ${escapeHtml(t('cloud.lines'))}: ${Number(s.edgeCount) || 0} ·
+            ${escapeHtml(formatWhen(s.submittedAt))}
+          </div>
+          <div class="cloud-attach-list" data-files-for="${escapeHtml(s.ownerUid || '')}|${escapeHtml(s.id)}"></div>
+        </div>
+        <div class="cloud-row__actions">
+          <button class="btn btn-sm btn-primary" data-act="open" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.open'))}</button>
+          <button class="btn btn-sm" data-act="zip" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.download'))}</button>
+          ${isStorageConfigured() ? `<button class="btn btn-sm" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
+        </div>
+      </div>`
+    )
+    .join('');
 }
 
 /** The sketches currently listed, so a download reuses what was already read. */
@@ -358,5 +381,6 @@ export function openAdminPanel() {
 }
 
 export function closeAdminPanel() {
+  stopInboxSubscription();
   if (el) el.classList.remove('is-open');
 }

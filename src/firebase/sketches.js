@@ -123,6 +123,37 @@ export async function unsubmitSketch(sketchId) {
  * firestore.indexes.json and the `{path=**}/sketches` rule.
  * @returns {Promise<Array<object>>}
  */
+/**
+ * Watch every submitted sketch, so the office learns of one as it arrives.
+ *
+ * The office asked to see a sketch the moment a surveyor sends it, not on the
+ * next time they think to open the panel — a one-shot read cannot do that. This
+ * is the same query as listSubmittedSketches, kept live.
+ *
+ * @param {(sketches: object[]) => void} onChange
+ * @param {(err: Error) => void} [onError]
+ * @returns {Promise<() => void>} unsubscribe
+ */
+export async function watchSubmittedSketches(onChange, onError) {
+  if (!isAdmin()) throw new Error('admin-only');
+  const db = await getDb();
+  const { collectionGroup, onSnapshot, query, where, orderBy } = await import(
+    'firebase/firestore'
+  );
+  return onSnapshot(
+    query(
+      collectionGroup(db, 'sketches'),
+      where('status', '==', SKETCH_STATUS.SUBMITTED),
+      orderBy('submittedAt', 'desc')
+    ),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, path: d.ref.path, ...d.data() }))),
+    (err) => {
+      if (typeof onError === 'function') onError(err);
+      else console.warn('inbox watch failed', err && err.message);
+    }
+  );
+}
+
 export async function listSubmittedSketches() {
   if (!isAdmin()) throw new Error('admin-only');
   const db = await getDb();

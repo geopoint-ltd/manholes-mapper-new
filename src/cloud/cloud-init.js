@@ -255,7 +255,7 @@ function renderMenuActions(profile) {
       ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
     </button>
     <div class="cloud-menu__hint">${escapeHtml(t('cloud.sendHint'))}</div>
-    ${isAdmin() ? `<button class="btn" data-cloud-menu="admin"><span class="material-icons">admin_panel_settings</span><span class="label">${escapeHtml(t('cloud.adminTitle'))}</span></button>` : ''}
+    ${isAdmin() ? `<button class="btn" data-cloud-menu="admin"><span class="material-icons">admin_panel_settings</span><span class="label">${escapeHtml(t('cloud.adminTitle'))}</span>${unreadArrivals ? `<span class="cloud-badge cloud-badge--new">${unreadArrivals}</span>` : ''}</button>` : ''}
     <button class="btn" data-cloud-menu="signout">
       <span class="material-icons">logout</span>
       <span class="label">${escapeHtml(t('cloud.signOut'))}</span>
@@ -276,6 +276,7 @@ function renderMenuActions(profile) {
   if (adminItem) {
     adminItem.addEventListener('click', async () => {
       close();
+      markArrivalsSeen();
       const panel = await import('./admin-panel.js');
       panel.openAdminPanel();
     });
@@ -327,7 +328,7 @@ function renderChip(profile) {
     <button class="btn btn-ghost" id="cloudSendBtn" title="${escapeHtml(currentIsSent() ? t('cloud.sendAgain') : t('cloud.sendSketch'))}">
       <span class="material-icons">cloud_upload</span>
     </button>
-    ${isAdmin() ? `<button class="btn btn-ghost" id="cloudAdminBtn" title="${escapeHtml(t('cloud.adminTitle'))}"><span class="material-icons">admin_panel_settings</span></button>` : ''}
+    ${isAdmin() ? `<button class="btn btn-ghost" id="cloudAdminBtn" title="${escapeHtml(t('cloud.adminTitle'))}"><span class="material-icons">admin_panel_settings</span>${unreadArrivals ? `<span class="cloud-badge cloud-badge--new">${unreadArrivals}</span>` : ''}</button>` : ''}
     <button class="btn btn-ghost" id="cloudSignOutBtn" title="${escapeHtml(t('cloud.signOut'))}">
       <span class="material-icons">logout</span>
     </button>
@@ -338,6 +339,7 @@ function renderChip(profile) {
   const adminBtn = chipEl.querySelector('#cloudAdminBtn');
   if (adminBtn) {
     adminBtn.addEventListener('click', async () => {
+      markArrivalsSeen();
       const panel = await import('./admin-panel.js');
       panel.openAdminPanel();
     });
@@ -480,6 +482,64 @@ function watchList() {
   listObserver.observe(list, { childList: true });
 }
 
+/* ---------------- arrivals ---------------- */
+
+// The office asked to know the moment a surveyor sends something, not the next
+// time they think to open the panel. This watch runs for the whole session, so
+// the count is right even while the panel is closed.
+let arrivalsUnsub = null;
+let knownSubmitted = null;
+let unreadArrivals = 0;
+
+async function watchArrivals() {
+  if (!isAdmin() || arrivalsUnsub) return;
+  try {
+    const { watchSubmittedSketches } = await import('../firebase/sketches.js');
+    arrivalsUnsub = await watchSubmittedSketches((sketches) => {
+      const ids = new Set(sketches.map((s) => s.path || s.id));
+      if (knownSubmitted === null) {
+        // The first snapshot is the existing backlog, not news. Announcing it
+        // would mean a toast per sketch every time the office opens the app.
+        knownSubmitted = ids;
+        return;
+      }
+      const fresh = sketches.filter((s) => !knownSubmitted.has(s.path || s.id));
+      knownSubmitted = ids;
+      if (!fresh.length) return;
+      unreadArrivals += fresh.length;
+      // Cap the toasts: a batch send of twelve should not bury the screen.
+      fresh.slice(0, 3).forEach((s) => {
+        toast(String(t('cloud.newArrival')).replace('{email}', s.ownerEmail || ''));
+      });
+      const profile = getProfile();
+      renderChip(profile);
+      renderMenuActions(profile);
+    });
+  } catch (err) {
+    console.warn('arrival watch failed', err && err.message);
+  }
+}
+
+function stopArrivalWatch() {
+  if (arrivalsUnsub) {
+    try {
+      arrivalsUnsub();
+    } catch (_) {}
+  }
+  arrivalsUnsub = null;
+  knownSubmitted = null;
+  unreadArrivals = 0;
+}
+
+/** Opening the panel is what marks the arrivals as seen. */
+function markArrivalsSeen() {
+  if (!unreadArrivals) return;
+  unreadArrivals = 0;
+  const profile = getProfile();
+  renderChip(profile);
+  renderMenuActions(profile);
+}
+
 /* ---------------- sync ---------------- */
 
 let syncTimer = null;
@@ -525,8 +585,10 @@ export function initCloud() {
       hideLogin();
       watchList();
       loadCloudStatuses();
+      watchArrivals();
     } else {
       cloudStatus.clear();
+      stopArrivalWatch();
       showLogin();
     }
   });

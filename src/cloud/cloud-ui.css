@@ -396,3 +396,65 @@
 #homeCloudActions .cloud-menu__send:disabled {
   opacity: 0.55;
 }
+
+/* ---------------- office panel chrome ---------------- */
+
+/* The card used to be one tall block inside a scrolling overlay, so its head
+   and tabs scrolled away with the content — on a phone you lost the title,
+   the tabs and the close button as soon as you looked at the second sketch.
+   `overflow: hidden` on the card also silently disables position:sticky on
+   anything inside it, which is why sticking the head never worked. Making the
+   card a flex column and scrolling only the body fixes both. */
+.cloud-panel.is-open {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+}
+.cloud-panel__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 100%;
+}
+.cloud-panel__head,
+.cloud-tabs { flex: 0 0 auto; }
+.cloud-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* An icon button with no explicit size collapses to whatever the glyph
+   inherits, which on a phone was nothing anyone could hit or even see. */
+#cloudAdminClose {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--color-text);
+}
+#cloudAdminClose .material-icons {
+  font-size: 24px;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Unread count on the ניהול button. */
+.cloud-badge--new {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .cloud-panel__card {
+    height: 100%;
+    border-radius: 0;
+  }
+}
