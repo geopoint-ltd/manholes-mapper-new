@@ -101,9 +101,6 @@ const adminModal = document.getElementById('adminModal');
 const adminContent = document.getElementById('adminContent');
 const adminSaveBtn = document.getElementById('adminSaveBtn');
 const adminCancelBtn = document.getElementById('adminCancelBtn');
-const adminImportBtn = document.getElementById('adminImportBtn');
-const adminExportBtn = document.getElementById('adminExportBtn');
-const adminImportFile = document.getElementById('adminImportFile');
 
 // Admin Screen elements (separate screen)
 const adminScreen = document.getElementById('adminScreen');
@@ -111,9 +108,6 @@ const adminScreenContent = document.getElementById('adminScreenContent');
 const adminScreenTitleEl = document.getElementById('adminScreenTitle');
 const adminScreenSaveBtn = document.getElementById('adminScreenSaveBtn');
 const adminScreenCancelBtn = document.getElementById('adminScreenCancelBtn');
-const adminScreenImportBtn = document.getElementById('adminScreenImportBtn');
-const adminScreenExportBtn = document.getElementById('adminScreenExportBtn');
-const adminScreenImportFile = document.getElementById('adminScreenImportFile');
 const mainEl = document.getElementById('main');
 
 // Mobile menu elements
@@ -742,181 +736,7 @@ if (adminSaveBtn) adminSaveBtn.addEventListener('click', () => {
   renderDetails();
   showToast(t('admin.saved'));
 });
-// Admin import/export handlers
-if (adminExportBtn) {
-  adminExportBtn.addEventListener('click', () => {
-    try {
-      const payload = {
-        kind: 'graphSketchAdminConfig',
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        data: adminConfig,
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-      a.href = URL.createObjectURL(blob);
-      a.download = `admin-config_${datePart}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      showToast(t('admin.exportSuccess'));
-    } catch (_) {
-      // no-op
-    }
-  });
-}
 
-if (adminImportBtn && adminImportFile) {
-  adminImportBtn.addEventListener('click', () => {
-    adminImportFile.value = '';
-    adminImportFile.click();
-  });
-  adminImportFile.addEventListener('change', async () => {
-    const file = adminImportFile.files && adminImportFile.files[0];
-    if (!file) return;
-    try {
-      let text = await file.text();
-      // Strip BOM and trim to be tolerant of editors that add BOM/newlines
-      if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      text = text.trim();
-      const parsed = JSON.parse(text);
-      // Accept both wrapped and raw formats
-      const incoming = (parsed && parsed.kind === 'graphSketchAdminConfig' && parsed.data)
-        ? parsed.data
-        : (parsed && parsed.nodes && parsed.edges)
-          ? parsed
-          : null;
-      if (!incoming) {
-        showToast(t('admin.importInvalid'));
-        return;
-      }
-      // Basic shape validation and normalization
-      function normalize(config) {
-        const merged = { ...JSON.parse(JSON.stringify(defaultAdminConfig)), ...config };
-        merged.nodes = merged.nodes || {};
-        merged.edges = merged.edges || {};
-        const incNodes = { ...defaultAdminConfig.nodes.include, ...(merged.nodes.include||{}) };
-        const incEdges = { ...defaultAdminConfig.edges.include, ...(merged.edges.include||{}) };
-        // Coerce include flags to booleans
-        Object.keys(incNodes).forEach(k => { incNodes[k] = !!incNodes[k]; });
-        Object.keys(incEdges).forEach(k => { incEdges[k] = !!incEdges[k]; });
-        merged.nodes.include = incNodes;
-        merged.edges.include = incEdges;
-        merged.nodes.defaults = { ...defaultAdminConfig.nodes.defaults, ...(merged.nodes.defaults||{}) };
-        merged.edges.defaults = { ...defaultAdminConfig.edges.defaults, ...(merged.edges.defaults||{}) };
-        merged.nodes.options = { ...defaultAdminConfig.nodes.options, ...(merged.nodes.options||{}) };
-        merged.edges.options = { ...defaultAdminConfig.edges.options, ...(merged.edges.options||{}) };
-        // customFields removed
-        // Ensure options rows have enabled defaulting to true
-        ['nodes','edges'].forEach(scope => {
-          const opt = merged[scope].options || {};
-          Object.keys(opt).forEach(key => {
-            const arr = Array.isArray(opt[key]) ? opt[key] : [];
-            opt[key] = arr.map(o => ({ ...o, enabled: o && o.enabled === false ? false : true }));
-          });
-        });
-        return merged;
-      }
-      adminConfig = normalize(incoming);
-      saveAdminConfig();
-      // Re-render admin UI to reflect imported settings if modal is open
-      if (adminModal) openAdminModal();
-      // If user is on the dedicated admin screen, refresh it as well
-      try {
-        if (document.body && document.body.classList && document.body.classList.contains('admin-screen')) {
-          openAdminScreen();
-        }
-      } catch (_) {}
-      // Also refresh details panel options
-      renderDetails();
-      showToast(t('admin.importSuccess'));
-    } catch (_) {
-      console.warn('Admin import failed', _);
-      showToast(t('admin.importInvalid'));
-    }
-  });
-}
-
-// Admin screen import/export handlers mirror modal handlers
-if (adminScreenExportBtn) {
-  adminScreenExportBtn.addEventListener('click', () => {
-    try {
-      const payload = { kind: 'graphSketchAdminConfig', version: 1, exportedAt: new Date().toISOString(), data: adminConfig };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-      a.href = URL.createObjectURL(blob);
-      a.download = `admin-config_${datePart}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      showToast(t('admin.exportSuccess'));
-    } catch (_) {}
-  });
-}
-if (adminScreenImportBtn && adminScreenImportFile) {
-  adminScreenImportBtn.addEventListener('click', () => {
-    adminScreenImportFile.value = '';
-    adminScreenImportFile.click();
-  });
-  adminScreenImportFile.addEventListener('change', async () => {
-    const file = adminScreenImportFile.files && adminScreenImportFile.files[0];
-    if (!file) return;
-    try {
-      // Preserve currently active tab before rebuild
-      const prevTab = (function() {
-        try {
-          const activeBtn = adminScreenContent && adminScreenContent.querySelector('.admin-tabs .tab.active');
-          return activeBtn ? activeBtn.getAttribute('data-tab-btn') : null;
-        } catch (_) { return null; }
-      })();
-      let text = await file.text();
-      if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      text = text.trim();
-      const parsed = JSON.parse(text);
-      const incoming = (parsed && parsed.kind === 'graphSketchAdminConfig' && parsed.data)
-        ? parsed.data
-        : (parsed && parsed.nodes && parsed.edges)
-          ? parsed
-          : null;
-      if (!incoming) { showToast(t('admin.importInvalid')); return; }
-      function normalize(config) {
-        const merged = { ...JSON.parse(JSON.stringify(defaultAdminConfig)), ...config };
-        merged.nodes = merged.nodes || {};
-        merged.edges = merged.edges || {};
-        const incNodes = { ...defaultAdminConfig.nodes.include, ...(merged.nodes.include||{}) };
-        const incEdges = { ...defaultAdminConfig.edges.include, ...(merged.edges.include||{}) };
-        Object.keys(incNodes).forEach(k => { incNodes[k] = !!incNodes[k]; });
-        Object.keys(incEdges).forEach(k => { incEdges[k] = !!incEdges[k]; });
-        merged.nodes.include = incNodes;
-        merged.edges.include = incEdges;
-        // customFields removed
-        merged.nodes.options = merged.nodes.options || {};
-        merged.edges.options = merged.edges.options || {};
-        merged.nodes.defaults = merged.nodes.defaults || {};
-        merged.edges.defaults = merged.edges.defaults || {};
-        return merged;
-      }
-      adminConfig = normalize(incoming);
-      saveAdminConfig();
-      try { openAdminScreen(); } catch (_) {}
-      // Restore previously selected tab if applicable
-      try {
-        if (prevTab && prevTab !== 'nodes') {
-          const tabs = adminScreenContent && adminScreenContent.querySelector('.admin-tabs');
-          const btn = tabs && tabs.querySelector(`[data-tab-btn="${prevTab}"]`);
-          if (btn && typeof btn.click === 'function') btn.click();
-        }
-      } catch (_) {}
-      // Refresh details panel to reflect updated dropdown options
-      try { renderDetails(); } catch (_) {}
-      showToast(t('admin.importSuccess'));
-    } catch (_) {
-      showToast(t('admin.importInvalid'));
-    }
-  });
-}
 
 // Admin screen save/cancel
 if (adminScreenSaveBtn) adminScreenSaveBtn.addEventListener('click', () => {
@@ -1185,28 +1005,6 @@ function applyLangToStaticUI() {
   }
   // Update edge legend alignment per language
   renderEdgeLegend();
-  // Update labels for admin import/export buttons
-  if (adminImportBtn) {
-    const lbl = adminImportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.import');
-    adminImportBtn.title = t('admin.import');
-  }
-  if (adminExportBtn) {
-    const lbl = adminExportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.export');
-    adminExportBtn.title = t('admin.export');
-  }
-  // Admin Screen import/export
-  if (typeof adminScreenImportBtn !== 'undefined' && adminScreenImportBtn) {
-    const lbl = adminScreenImportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.import');
-    adminScreenImportBtn.title = t('admin.import');
-  }
-  if (typeof adminScreenExportBtn !== 'undefined' && adminScreenExportBtn) {
-    const lbl = adminScreenExportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.export');
-    adminScreenExportBtn.title = t('admin.export');
-  }
   // Update admin action buttons (modal)
   if (typeof adminCancelBtn !== 'undefined' && adminCancelBtn) {
     adminCancelBtn.textContent = t('cancel');
