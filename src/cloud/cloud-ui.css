@@ -1249,6 +1249,18 @@
   border-color: var(--color-primary);
   color: #fff;
 }
+/* Destructive, so it reads as such — but as an outline, not a solid red slab
+   on every row of the inbox. */
+.inbox-btn--danger,
+.inbox-btn--danger:hover {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+.inbox-btn--danger:hover { background: rgba(220, 38, 38, 0.08); }
+@media (prefers-color-scheme: dark) {
+  .inbox-btn--danger,
+  .inbox-btn--danger:hover { color: #fca5a5; }
+}
 
 /* The checklist reads as three toggles that turn green when done. */
 .inbox-row__office {

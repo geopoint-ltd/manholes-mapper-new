@@ -173,6 +173,21 @@ export async function listSubmittedSketches() {
  * @param {string} ownerUid
  * @param {string} sketchId
  */
+/**
+ * Delete a received sketch from the app. Admin only.
+ *
+ * This removes the cloud copy — what the office sees and downloads. It cannot
+ * reach the worker's phone: sketches there live in local storage, and the app
+ * never deletes local work on the office's say-so, because on a device that is
+ * often the only copy of unsent work.
+ */
+export async function deleteMemberSketch(ownerUid, sketchId) {
+  if (!isAdmin()) throw new Error('admin-only');
+  const db = await getDb();
+  const { doc, deleteDoc } = await import('firebase/firestore');
+  await deleteDoc(doc(db, 'users', String(ownerUid), 'sketches', String(sketchId)));
+}
+
 export async function getMemberSketch(ownerUid, sketchId) {
   if (!isAdmin()) throw new Error('admin-only');
   const db = await getDb();

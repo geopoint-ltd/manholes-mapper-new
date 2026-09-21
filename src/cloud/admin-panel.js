@@ -12,7 +12,7 @@ import {
   sendMemberPasswordReset,
   removeMember,
 } from '../firebase/users.js';
-import { watchSubmittedSketches } from '../firebase/sketches.js';
+import { watchSubmittedSketches, deleteMemberSketch } from '../firebase/sketches.js';
 import { listAttachments, formatSize } from '../firebase/attachments.js';
 import { isStorageConfigured } from '../firebase/config.js';
 import { buildSketchZip, saveBlob, sketchDisplayName } from './sketch-zip.js';
@@ -274,7 +274,6 @@ function paintInbox(list, sketches) {
   }
   const labels = {
     inDb: t('cloud.officeInDb'),
-    removedFromApp: t('cloud.officeRemovedFromApp'),
     inTrello: t('cloud.officeInTrello'),
   };
   list.innerHTML = sketches
@@ -307,6 +306,10 @@ function paintInbox(list, sketches) {
               <span>${escapeHtml(t('cloud.download'))}</span>
             </button>
             ${isStorageConfigured() ? `<button class="btn inbox-btn" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
+            <button class="btn inbox-btn inbox-btn--danger" data-act="delete" data-path="${path}">
+              <span class="material-icons" aria-hidden="true">delete_outline</span>
+              <span>${escapeHtml(t('cloud.deleteSketch'))}</span>
+            </button>
           </div>
         </div>
         <div class="inbox-row__tags">${tagRow(s.tags || [], panelTags, { removable: true, canAdd: true })}</div>
@@ -607,6 +610,25 @@ function wire() {
     const openBtn = event.target.closest('button[data-act="open"]');
     if (openBtn) {
       openInEditor(openBtn.getAttribute('data-path'));
+      return;
+    }
+    const delBtn = event.target.closest('button[data-act="delete"]');
+    if (delBtn) {
+      const target = inboxCache.get(delBtn.getAttribute('data-path'));
+      if (!target) return;
+      // Irreversible, so the prompt names exactly what goes and whose it is.
+      const question = String(t('cloud.confirmDeleteSketch'))
+        .replace('{name}', sketchDisplayName(target))
+        .replace('{email}', target.ownerEmail || '');
+      if (!confirm(question)) return;
+      delBtn.disabled = true;
+      deleteMemberSketch(target.ownerUid, target.id)
+        // The live inbox drops the row by itself once the delete lands.
+        .then(() => toast(t('cloud.sketchDeleted')))
+        .catch((err) => {
+          delBtn.disabled = false;
+          toast((err && err.message) || String(err));
+        });
       return;
     }
     const row = event.target.closest('.inbox-row');

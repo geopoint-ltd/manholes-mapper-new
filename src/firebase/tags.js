@@ -28,8 +28,8 @@ export const TAG_COLORS = [
   '#475569', // slate
 ];
 
-/** The three things the office ticks off for every batch, in working order. */
-export const OFFICE_FLAGS = ['inDb', 'removedFromApp', 'inTrello'];
+/** What the office ticks off for every batch, in working order. */
+export const OFFICE_FLAGS = ['inDb', 'inTrello'];
 
 const MAX_NAME = 40;
 
@@ -148,7 +148,7 @@ export async function removeSketchTag(ownerUid, sketchId, tagId) {
 
 /**
  * Tick or untick one item of the office checklist on a sketch. Admin only.
- * @param {'inDb'|'removedFromApp'|'inTrello'} flag
+ * @param {'inDb'|'inTrello'} flag
  */
 export async function setOfficeFlag(ownerUid, sketchId, flag, value) {
   assertAdmin();
