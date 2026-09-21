@@ -167,15 +167,23 @@ function renderHomeCloud(profile) {
     return;
   }
 
+  // Who is signed in, as one compact line: initial, name and address, role,
+  // and a sign-out that says what it does rather than a bare icon.
   const role = isAdmin() ? 'admin' : 'member';
+  const name = String(profile.displayName || profile.email || '').trim();
+  const initial = (name[0] || '?').toUpperCase();
+  const showEmail = profile.email && profile.email !== name;
   head.innerHTML = `
     <div class="cloud-home__who">
+      <span class="cloud-home__avatar" aria-hidden="true">${escapeHtml(initial)}</span>
       <div class="cloud-home__id">
-        <span class="cloud-home__name" dir="auto">${escapeHtml(profile.displayName || profile.email)}</span>
-        <span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>
+        <span class="cloud-home__name" dir="auto">${escapeHtml(name)}</span>
+        ${showEmail ? `<span class="cloud-home__email" dir="ltr">${escapeHtml(profile.email)}</span>` : ''}
       </div>
-      <button class="btn btn-ghost" data-cloud-home="signout" title="${escapeHtml(t('cloud.signOut'))}">
-        <span class="material-icons">logout</span>
+      <span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>
+      <button class="btn cloud-home__signout" data-cloud-home="signout">
+        <span class="material-icons" aria-hidden="true">logout</span>
+        <span>${escapeHtml(t('cloud.signOut'))}</span>
       </button>
     </div>
   `;
@@ -184,31 +192,46 @@ function renderHomeCloud(profile) {
     await signOut();
   });
 
-  const count = selected.size;
+  // Selection. A sketch deleted since it was ticked must not be counted.
   const all = selectableIds();
-  const everySelected = all.length > 0 && all.every((id) => selected.has(id));
+  for (const id of Array.from(selected)) if (!all.includes(id)) selected.delete(id);
+  if (!all.length) {
+    actions.innerHTML = '';
+    return;
+  }
+  const count = selected.size;
+  const every = count === all.length;
+  // Progressive: with nothing ticked this is one light line. The send button
+  // and its "goes straight to the office" note only appear once there is
+  // something to send — a greyed-out full-width button read as broken.
   actions.innerHTML = `
-    <div class="cloud-home__bulk">
-      <button class="btn btn-ghost btn-sm" data-cloud-home="toggleAll">
-        ${escapeHtml(everySelected ? t('cloud.clearSelection') : t('cloud.selectAll'))}
-      </button>
-      <span class="cloud-home__count">${count ? escapeHtml(String(count)) : ''}</span>
+    <div class="cloud-select">
+      <label class="cloud-select__all">
+        <input type="checkbox" data-cloud-home="toggleAll" ${every ? 'checked' : ''} />
+        <span>${escapeHtml(t('cloud.selectAll'))}</span>
+      </label>
+      ${count ? `<span class="cloud-select__count">${escapeHtml(String(t('cloud.selectedCount')).replace('{n}', String(count)))}</span>` : ''}
+      ${count ? `<button class="btn btn-primary cloud-select__send" data-cloud-home="send" title="${escapeHtml(t('cloud.sendSelected'))}">
+          <span class="material-icons" aria-hidden="true">cloud_upload</span>
+          <span>${escapeHtml(t('cloud.sendSelectedShort'))}</span>
+        </button>` : ''}
     </div>
-    <button class="btn cloud-menu__send" data-cloud-home="send" ${count ? '' : 'disabled'}>
-      <span class="material-icons">cloud_upload</span>
-      <span class="label">${escapeHtml(t('cloud.sendSelected'))}${count ? ` (${count})` : ''}</span>
-    </button>
-    <div class="cloud-menu__hint">${escapeHtml(t('cloud.sendHint'))}</div>
+    ${count ? `<div class="cloud-menu__hint cloud-select__hint">${escapeHtml(t('cloud.sendHint'))}</div>` : ''}
   `;
-  actions.querySelector('[data-cloud-home="toggleAll"]').addEventListener('click', () => {
-    if (everySelected) selected.clear();
+  const allBox = actions.querySelector('[data-cloud-home="toggleAll"]');
+  allBox.indeterminate = count > 0 && !every;
+  allBox.addEventListener('change', () => {
+    if (every) selected.clear();
     else all.forEach((id) => selected.add(id));
     decorateList();
     renderHomeCloud(getProfile());
   });
-  actions.querySelector('[data-cloud-home="send"]').addEventListener('click', async (event) => {
-    await sendSelected(event.currentTarget);
-  });
+  const sendBtn = actions.querySelector('[data-cloud-home="send"]');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', async (event) => {
+      await sendSelected(event.currentTarget);
+    });
+  }
 }
 
 /* ---------------- phone menu ---------------- */
@@ -364,7 +387,8 @@ function buildRowActions(sketchId) {
   const withFiles = isStorageConfigured();
   wrap.innerHTML = `
     <label class="cloud-pick">
-      <input type="checkbox" data-cloud="pick" ${selected.has(String(sketchId)) ? 'checked' : ''} />
+      <input type="checkbox" data-cloud="pick" ${selected.has(String(sketchId)) ? 'checked' : ''}
+             aria-label="${escapeHtml(t('cloud.selectForSending'))}" />
     </label>
     ${sent ? `<span class="cloud-badge cloud-badge--submitted">${escapeHtml(t('cloud.sent'))}</span>` : ''}
     <button class="btn cloud-row__send" data-cloud="send">
@@ -460,15 +484,32 @@ function decorateList() {
   if (!getProfile()) return;
   const list = document.getElementById('sketchList');
   if (!list) return;
-  list.querySelectorAll('[data-action="open"][data-id]').forEach((btn) => {
-    const sketchId = btn.getAttribute('data-id');
-    // The whole card, not the Open/Duplicate/Delete row: a phone cannot fit a
-    // fifth button on that line, and the cloud actions need room of their own.
-    const row = btn.closest('#sketchList > div') || btn.closest('div[style]') || btn.parentElement;
-    if (!row) return;
-    const existing = row.querySelector(`[data-cloud-actions="${CSS.escape(sketchId)}"]`);
-    if (existing) existing.remove();
-    row.appendChild(buildRowActions(sketchId));
+  list.querySelectorAll('.sketch-card[data-sketch-id]').forEach((card) => {
+    const sketchId = card.dataset.sketchId;
+    const wrap = buildRowActions(sketchId);
+    // buildRowActions builds one strip; the card has a place for each piece.
+    // Moving a node keeps its listeners, so every handler stays exactly as
+    // written and each control just sits where it reads naturally: the tick
+    // box leading the card, "sent" beside the title, send beside Open.
+    const place = (slot, node) => {
+      const target = card.querySelector(`[data-slot="${slot}"]`);
+      if (target) target.replaceChildren(...(node ? [node] : []));
+    };
+    const sent = cloudStatus.get(String(sketchId)) === SKETCH_STATUS.SUBMITTED;
+    place('pick', wrap.querySelector('.cloud-pick'));
+    place('status', wrap.querySelector('.cloud-badge--submitted'));
+    const send = wrap.querySelector('[data-cloud="send"]');
+    // Already in the office: sending again is a secondary action, not the call
+    // to action it is for a sketch nobody has received yet.
+    if (send) send.classList.toggle('is-sent', sent);
+    place('send', send);
+    // What is left — the attachment controls, when a bucket exists — keeps its
+    // wrapper, which those handlers look their elements up in.
+    place('extra', wrap.children.length ? wrap : null);
+
+    const box = card.querySelector('[data-cloud="pick"]');
+    card.classList.toggle('is-selected', Boolean(box && box.checked));
+    if (box) box.addEventListener('change', () => card.classList.toggle('is-selected', box.checked));
   });
 }
 

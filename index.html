@@ -280,6 +280,7 @@
           <div class="panel">
             <div id="homeHead">
               <h2 id="homeTitle">השרטוטים שלי</h2>
+              <span id="homeCount" class="home-count"></span>
               <button id="homeCloseBtn" class="btn btn-ghost" title="">
                 <span class="material-icons">close</span>
               </button>
@@ -290,11 +291,16 @@
             <div id="homeActions">
               <!-- Filled by the cloud layer: send the selected sketches. -->
               <div id="homeCloudActions"></div>
-              <button id="homeImportBtn" class="btn">
-                <span class="material-icons">upload</span>
-                <span class="label"></span>
-              </button>
-              <button id="createFromHomeBtn" class="btn btn-primary">שרטוט חדש</button>
+              <div class="home-actions__row">
+                <button id="homeImportBtn" class="btn">
+                  <span class="material-icons" aria-hidden="true">upload_file</span>
+                  <span class="label"></span>
+                </button>
+                <button id="createFromHomeBtn" class="btn btn-primary">
+                  <span class="material-icons" aria-hidden="true">add</span>
+                  <span class="label">שרטוט חדש</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -3125,3 +3125,203 @@ input.floating-keyboard-active {
   text-overflow: ellipsis;
 }
 #headerActions { flex: 0 0 auto; }
+
+/* ---- navbar: a sketch name, not the wordmark ---- */
+#appTitle.is-sketch,
+.soft-blue-header #appTitle.is-sketch {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--color-text);
+}
+#appTitle.is-sketch::after { display: none; }
+@media (max-width: 600px) {
+  #appTitle.is-sketch { font-size: 0.92rem; }
+}
+
+/* ---- the sketch list ---- */
+
+#homeHead { justify-content: flex-start; gap: 0.5rem; }
+#homeHead h2 { font-size: 1.2rem; }
+#homeCloseBtn { margin-inline-start: auto; }
+.home-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.45rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.home-count:empty { display: none; }
+
+#homePanel #sketchList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.sketch-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.sketch-card:hover { border-color: rgba(37, 99, 235, 0.35); }
+.sketch-card.is-selected {
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.05);
+}
+.sketch-card__pick:empty { display: none; }
+.sketch-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.sketch-card__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.sketch-card .sketch-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: text;
+  word-break: break-word;
+}
+.sketch-card__status:empty { display: none; }
+.sketch-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+.sketch-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.sketch-card__spacer { flex: 1 1 auto; }
+.sketch-card__send:empty { display: none; }
+.sketch-card__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 9px;
+  font-size: 0.88rem;
+}
+.sketch-card__actions .btn .material-icons { font-size: 17px; line-height: 1; }
+.sketch-card__open {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+.sketch-card__open:hover { background: rgba(37, 99, 235, 0.08); }
+.sketch-card__actions .sketch-card__icon {
+  width: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-muted);
+}
+.sketch-card__icon:hover { color: var(--color-text); background: rgba(100, 116, 139, 0.1); }
+/* Delete stays one tap away but no longer shouts in red on every card; it
+   turns red only under the finger or the pointer. */
+.sketch-card__icon--danger:hover {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.08);
+}
+.sketch-card__extra:empty { display: none; }
+
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2rem 1rem;
+  color: var(--color-muted);
+  text-align: center;
+  font-size: 0.92rem;
+}
+.home-empty .material-icons { font-size: 36px; opacity: 0.6; }
+
+/* Import and new side by side, instead of two stacked full-width slabs. */
+.home-actions__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+#homeActions .home-actions__row .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 42px;
+  font-size: 0.9rem;
+}
+#homeActions .home-actions__row .material-icons { font-size: 18px; }
+
+@media (max-width: 600px) {
+  .sketch-card__actions .btn { min-height: 40px; }
+  .sketch-card__actions .sketch-card__icon { width: 40px; }
+}
+
+/* Copy and delete live in the head row's corner: on a phone the action row
+   could not fit Open, Send and both icons, and delete wrapped onto a line of
+   its own. The head row wraps the title instead, never the tools. */
+.sketch-card__head { flex-wrap: nowrap; align-items: flex-start; }
+.sketch-card__head .sketch-title { flex: 0 1 auto; min-width: 0; }
+.sketch-card__tools {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-inline-start: auto;
+  margin-top: -0.3rem;
+  margin-inline-end: -0.35rem;
+}
+.sketch-card__tools .sketch-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 8px;
+}
+.sketch-card__tools .material-icons { font-size: 18px; }
+@media (max-width: 600px) {
+  .sketch-card__tools .sketch-card__icon { width: 38px; height: 38px; }
+}
+#homePanel #sketchList { scrollbar-width: thin; }
+
+/* "Sent" sits at the head of the details line rather than beside the title,
+   where it pushed a name like sketch_2026-09-06 into breaking mid-date. */
+.sketch-card__meta { align-items: center; }
+.sketch-card__tools .sketch-card__icon {
+  background: transparent;
+  color: var(--color-muted);
+}

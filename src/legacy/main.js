@@ -200,6 +200,9 @@ function updateBoardTitle() {
   if (appTitleEl) {
     appTitleEl.textContent = name || app;
     appTitleEl.title = name ? `${name} — ${app}` : app;
+    // The gradient, extra-bold wordmark style is for the app's name. A file
+    // name set that way shouted across the navbar, so it gets a quiet style.
+    appTitleEl.classList.toggle('is-sketch', Boolean(name));
   }
   document.title = name ? `${name} — ${app}` : 'Manhole Mapper (ממפה שוחות)';
 }
@@ -1056,7 +1059,7 @@ function applyLangToStaticUI() {
     homeCloseBtn.title = t('close');
   }
   if (typeof homeImportBtn !== 'undefined' && homeImportBtn) {
-    setBtnLabel(homeImportBtn, t('importSketch'));
+    setBtnLabel(homeImportBtn, t('homeImport'));
     homeImportBtn.title = t('importSketch');
   }
 }
@@ -1471,41 +1474,95 @@ try {
   };
 } catch (_) {}
 
+/**
+ * What an unnamed sketch is called: the day it was drawn, DD-MM-YYYY. That is
+ * how the crews write and file a survey, and it matches what the office sees
+ * for the same sketch (sketchDisplayName in src/cloud/sketch-zip.js) — the old
+ * fallback was the raw id and an ISO timestamp.
+ */
+function fallbackSketchTitle(rec) {
+  const raw = rec.creationDate || rec.createdAt || '';
+  const pad = (n) => String(n).padStart(2, '0');
+  // A bare date from the date picker is read as the date it says, not as UTC
+  // midnight shifted into the local zone.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw));
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  const d = new Date(raw);
+  if (raw && !Number.isNaN(d.getTime())) {
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return String(rec.id);
+}
+
 function renderHome() {
   if (!homePanel || !sketchListEl) return;
   startPanel.style.display = 'none';
   homePanel.style.display = 'flex';
   const lib = getLibrary();
+  const countEl = document.getElementById('homeCount');
+  if (countEl) countEl.textContent = lib.length ? String(lib.length) : '';
   sketchListEl.innerHTML = '';
   if (lib.length === 0) {
-    const empty = document.createElement('div');
-    empty.textContent = t('noSketches');
-    sketchListEl.appendChild(empty);
-  } else {
-    lib.forEach((rec) => {
-      const item = document.createElement('div');
-      item.style.border = '1px solid var(--color-border)';
-      item.style.borderRadius = '8px';
-      item.style.padding = '0.5rem';
-      item.style.marginBottom = '0.5rem';
-    const displayName = rec.name && String(rec.name).trim().length > 0 ? rec.name : null;
-    const title = displayName || t('listTitle', rec.id.slice(-6), (rec.creationDate || rec.createdAt));
-      item.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div style="min-width:0;">
-            <div class="sketch-title" data-id="${rec.id}" style="font-weight:bold;cursor:text;word-break:break-word;">${title}</div>
-            <div style="font-size:0.85rem;color:var(--color-muted);">${t('listUpdated', new Date(rec.updatedAt || rec.createdAt).toLocaleString())}</div>
-            <div style="font-size:0.85rem;color:var(--color-muted);">${t('listCounts', (rec.nodes||[]).length, (rec.edges||[]).length)}</div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn" data-action="open" data-id="${rec.id}">${t('listOpen')}</button>
-            <button class="btn" data-action="duplicate" data-id="${rec.id}">${t('listDuplicate')}</button>
-            <button class="btn btn-danger" data-action="delete" data-id="${rec.id}">${t('listDelete')}</button>
-          </div>
-        </div>`;
-      sketchListEl.appendChild(item);
-    });
+    sketchListEl.innerHTML = `
+      <div class="home-empty">
+        <span class="material-icons" aria-hidden="true">note_add</span>
+        <div>${escapeHtml(t('noSketches'))}</div>
+      </div>`;
+    return;
   }
+  const locale = currentLang === 'he' ? 'he-IL' : 'en-GB';
+  const when = (value) => {
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) return '';
+    try {
+      return d.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+    } catch (_) {
+      return d.toLocaleString();
+    }
+  };
+  lib.forEach((rec) => {
+    const id = escapeHtml(rec.id);
+    const hasName = rec.name && String(rec.name).trim().length > 0;
+    // Names come from people and from imported file names, so they are text,
+    // never markup.
+    const title = escapeHtml(hasName ? rec.name : fallbackSketchTitle(rec));
+    const card = document.createElement('article');
+    card.className = 'sketch-card';
+    card.dataset.sketchId = rec.id;
+    // The empty data-slot elements are where the cloud layer, when signed in,
+    // puts the tick box, the "sent" badge and the send button.
+    card.innerHTML = `
+      <div class="sketch-card__pick" data-slot="pick"></div>
+      <div class="sketch-card__body">
+        <div class="sketch-card__head">
+          <div class="sketch-title" data-id="${id}">${title}</div>
+          <span class="sketch-card__tools">
+            <button class="btn sketch-card__icon" data-action="duplicate" data-id="${id}"
+                    title="${escapeHtml(t('listDuplicate'))}" aria-label="${escapeHtml(t('listDuplicate'))}">
+              <span class="material-icons" aria-hidden="true">content_copy</span>
+            </button>
+            <button class="btn sketch-card__icon sketch-card__icon--danger" data-action="delete" data-id="${id}"
+                    title="${escapeHtml(t('listDelete'))}" aria-label="${escapeHtml(t('listDelete'))}">
+              <span class="material-icons" aria-hidden="true">delete_outline</span>
+            </button>
+          </span>
+        </div>
+        <div class="sketch-card__meta">
+          <span class="sketch-card__status" data-slot="status"></span>
+          <span>${escapeHtml(t('listCounts', (rec.nodes || []).length, (rec.edges || []).length))}</span>
+          <span>${escapeHtml(t('listUpdated', when(rec.updatedAt || rec.createdAt)))}</span>
+        </div>
+        <div class="sketch-card__actions">
+          <button class="btn sketch-card__open" data-action="open" data-id="${id}">
+            <span class="material-icons" aria-hidden="true">edit</span>
+            <span>${escapeHtml(t('listOpen'))}</span>
+          </button>
+          <span class="sketch-card__send" data-slot="send"></span>
+        </div>
+        <div class="sketch-card__extra" data-slot="extra"></div>
+      </div>`;
+    sketchListEl.appendChild(card);
+  });
 }
 
 function hideHome() {
@@ -3790,8 +3847,12 @@ if (sketchListEl) {
       input.addEventListener('blur', commit);
       return;
     }
-    const action = target.getAttribute('data-action');
-    const id = target.getAttribute('data-id');
+    // closest(): the buttons carry an icon, and a tap on the icon lands on the
+    // icon, not the button that holds the data attributes.
+    const actionEl = target.closest('[data-action][data-id]');
+    if (!actionEl || !sketchListEl.contains(actionEl)) return;
+    const action = actionEl.getAttribute('data-action');
+    const id = actionEl.getAttribute('data-id');
     if (!action || !id) return;
     if (action === 'open') {
       hideHome();

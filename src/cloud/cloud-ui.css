@@ -653,3 +653,326 @@
 /* Tighter rhythm on the home action bar — the gap the office circled. */
 #homeActions { gap: 0.35rem; padding-top: 0.4rem; }
 #homeCloudActions .cloud-menu__hint { padding-bottom: 0; }
+
+/* ---------------- the sketch list: account line + selection ---------------- */
+
+.cloud-home__who {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.1rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.cloud-home__avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.cloud-home__id {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.cloud-home__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-home__email {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.cloud-home__signout,
+.cloud-home__signout:hover {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 34px;
+  padding: 0 0.6rem;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+.cloud-home__signout:hover { background: var(--color-bg); }
+.cloud-home__signout .material-icons { font-size: 17px; }
+
+.cloud-select {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+}
+.cloud-select__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cloud-select__all input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+.cloud-select__count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+#homeActions .cloud-select .cloud-select__send {
+  width: auto;
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  font-size: 0.9rem;
+}
+.cloud-select__send .material-icons { font-size: 18px; }
+.cloud-select__hint { text-align: end; }
+
+/* On a card, "send again" is secondary; the badge already says it arrived. */
+.cloud-row__send.is-sent,
+.cloud-row__send.is-sent:hover {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.cloud-badge--submitted .material-icons { font-size: 13px; margin-inline-end: 2px; }
+.sketch-card .cloud-pick { padding: 0.15rem 0 0; }
+
+/* One line, even on a phone: the bar is pinned under the list, and every
+   line it takes is a line of sketches the surveyor cannot see. */
+.cloud-select { flex-wrap: nowrap; }
+.cloud-select__count { white-space: nowrap; }
+
+/* ---------------- office panel: users tab ---------------- */
+
+.cloud-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.cloud-section-title .material-icons { font-size: 19px; color: var(--color-primary); }
+
+.cloud-add {
+  margin-bottom: 1.4rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+}
+.cloud-add__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+/* The app's global input rule covers only text and date inputs, so the email
+   field rendered as the browser's bare default box. These fields set their own
+   frame, and it matches the login screen's. */
+.cloud-field { min-width: 0; }
+.cloud-field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.cloud-field > input,
+.cloud-field__control {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.cloud-field > input {
+  padding: 0 0.75rem;
+  font: inherit;
+  font-size: 0.95rem;
+}
+.cloud-field > input:focus,
+.cloud-field__control:focus-within {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+.cloud-field__control {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0 0.2rem 0 0.75rem;
+  direction: ltr;
+}
+.cloud-field__control input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+}
+.cloud-field__control input:focus,
+.cloud-field__control input:focus-visible { outline: none; box-shadow: none; }
+.cloud-field__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.cloud-field__icon:hover { color: var(--color-text); background: rgba(100, 116, 139, 0.12); }
+.cloud-field__icon .material-icons { font-size: 18px; }
+
+.cloud-add__foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.85rem;
+}
+.cloud-add__note {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+.cloud-add__note .material-icons { font-size: 16px; margin-top: 1px; }
+.cloud-add__submit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 42px;
+  padding: 0 1rem;
+  border-radius: 10px;
+}
+.cloud-add__submit .material-icons { font-size: 18px; }
+
+.cloud-user {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.cloud-user__avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--color-primary);
+}
+.cloud-user__avatar--admin { background: var(--color-primary); color: #fff; }
+.cloud-user__main { flex: 1 1 180px; min-width: 0; }
+.cloud-user__name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.93rem;
+}
+.cloud-user__email {
+  margin-top: 1px;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-user.is-disabled .cloud-user__main,
+.cloud-user.is-disabled .cloud-user__avatar { opacity: 0.55; }
+.cloud-user__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.cloud-user__btn,
+.cloud-user__btn:hover {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 34px;
+  padding: 0 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+.cloud-user__btn:hover { background: var(--color-bg); }
+.cloud-user__btn .material-icons { font-size: 16px; }
+/* Remove is destructive but rare; it reads as such without shouting in solid
+   red on every row. */
+.cloud-user__btn--danger,
+.cloud-user__btn--danger:hover {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+.cloud-user__btn--danger:hover { background: rgba(220, 38, 38, 0.08); }
+
+@media (max-width: 640px) {
+  .cloud-add__grid { grid-template-columns: 1fr; }
+  .cloud-add__foot { flex-direction: column; align-items: stretch; }
+  .cloud-add__submit { justify-content: center; min-height: 44px; }
+  .cloud-field > input { font-size: 16px; }
+  .cloud-field__control input { font-size: 16px; }
+  /* Actions get their own line under the name, rather than squeezing it. */
+  .cloud-user__actions { flex-basis: 100%; }
+  .cloud-user__btn { min-height: 38px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .cloud-user__btn--danger,
+  .cloud-user__btn--danger:hover { color: #fca5a5; }
+}
