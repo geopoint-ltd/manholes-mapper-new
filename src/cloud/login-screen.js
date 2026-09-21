@@ -5,7 +5,7 @@
 // dropped session does not cost a surveyor their work.
 
 import { escapeHtml } from '../dom/dom-utils.js';
-import { signIn, sendPasswordReset, describeAuthError } from '../firebase/auth.js';
+import { signIn, describeAuthError } from '../firebase/auth.js';
 
 let el = null;
 
@@ -41,7 +41,6 @@ function build() {
         <span class="material-icons">login</span>
         <span>${escapeHtml(t('cloud.signIn'))}</span>
       </button>
-      <button type="button" class="cloud-login__link" id="cloudForgot">${escapeHtml(t('cloud.forgot'))}</button>
     </form>
   `;
   return root;
@@ -83,21 +82,6 @@ export function showLogin() {
         showError(describeAuthError(err, t));
       } finally {
         setBusy(false);
-      }
-    });
-
-    el.querySelector('#cloudForgot').addEventListener('click', async () => {
-      const email = el.querySelector('#cloudEmail').value;
-      if (!email) {
-        showError(t('cloud.errMissingEmail'));
-        return;
-      }
-      try {
-        await sendPasswordReset(email);
-        showError('');
-        if (typeof window.showToast === 'function') window.showToast(t('cloud.resetSent'));
-      } catch (err) {
-        showError(describeAuthError(err, t));
       }
     });
   }
