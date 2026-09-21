@@ -3106,3 +3106,22 @@ input.floating-keyboard-active {
   border-color: var(--color-border);
 }
 #homePanel .btn-ghost:hover { background: var(--color-bg); color: var(--color-text); }
+
+/* ---- the board title carries the sketch name now ---- */
+
+/* A sketch name is often a whole sentence ("טבריה ביוב השלמות אזור 9 ...").
+   Left to wrap, it grew the phone header from one line to four, and the home
+   sheet, search bar and menu are all positioned at a fixed 3.5rem below it.
+   One line, ellipsis; the full name stays in the browser tab and on hover. */
+#brand {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+#brand img { flex: 0 0 auto; }
+#appTitle {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#headerActions { flex: 0 0 auto; }

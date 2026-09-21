@@ -185,6 +185,24 @@ let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
 let schemaVersion = SCHEMA_VERSION; // stamped on save; older sketches migrate on load
 let currentSketchName = null; // human-friendly name for the sketch
+
+/**
+ * Keep the board's identity visible.
+ *
+ * The navbar shows the current sketch's name — for an imported sketch, the
+ * file it came from — and the browser tab carries it too, so two open tabs
+ * can be told apart. An unnamed sketch falls back to the plain app title.
+ * updateTexts() routes through here, so a language switch cannot clobber it.
+ */
+function updateBoardTitle() {
+  const app = t('appTitle');
+  const name = currentSketchName ? String(currentSketchName).trim() : '';
+  if (appTitleEl) {
+    appTitleEl.textContent = name || app;
+    appTitleEl.title = name ? `${name} — ${app}` : app;
+  }
+  document.title = name ? `${name} — ${app}` : 'Manhole Mapper (ממפה שוחות)';
+}
 // Every change is written to the library as well as to localStorage. This used
 // to be a toggle, and a device left in manual mode kept its library copy stale:
 // a reload dropped the surveyor on the sketch list, and opening the sketch from
@@ -848,7 +866,7 @@ if (window.ResizeObserver) {
 // use global t/isRTL injected from module entry
 
 function applyLangToStaticUI() {
-  if (appTitleEl) appTitleEl.textContent = t('appTitle');
+  updateBoardTitle();
   // Helper to set a button's visible label if it has a `.label` span
   const setBtnLabel = (btn, text) => {
     if (!btn) return;
@@ -1123,6 +1141,7 @@ function loadFromStorage() {
     creationDate = parsed.creationDate || null;
     currentSketchId = parsed.sketchId || null;
     currentSketchName = parsed.sketchName || null;
+    updateBoardTitle();
     // Ensure each node has required properties
     nodes.forEach((node) => {
       if (node.material === undefined) node.material = NODE_MATERIALS[0];
@@ -1343,6 +1362,7 @@ function loadFromLibrary(sketchId) {
   creationDate = rec.creationDate || rec.createdAt || null;
   currentSketchId = rec.id;
   currentSketchName = rec.name || null;
+  updateBoardTitle();
   // Recover option values truncated by the old unescaped drawer markup
   repairTruncatedOptionValues(nodes, edges, adminConfig);
   computeNodeTypes();
@@ -1508,6 +1528,7 @@ function newSketch(date) {
   currentSketchId = null; // new unsaved sketch
   schemaVersion = SCHEMA_VERSION;
   currentSketchName = null;
+  updateBoardTitle();
   saveToStorage();
   draw();
   renderDetails();
@@ -3670,7 +3691,13 @@ if (importSketchBtn && importSketchFile) {
       nextNodeId = importedSketch.nextNodeId;
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
-      currentSketchName = importedSketch.sketchName;
+      // Name the sketch after the file it came from, not whatever name was
+      // embedded in the JSON — the file on disk is what the surveyor can see.
+      const importedFileName = String(file.name || '')
+        .replace(/\.[^.]+$/, '')
+        .trim();
+      currentSketchName = importedFileName || importedSketch.sketchName || null;
+      updateBoardTitle();
 
       // Recover option values truncated by the old unescaped drawer markup
       repairTruncatedOptionValues(nodes, edges, adminConfig);
@@ -3747,6 +3774,7 @@ if (sketchListEl) {
         setLibrary(lib);
         if (currentSketchId === rec.id) {
           currentSketchName = rec.name || null;
+          updateBoardTitle();
           saveToStorage();
         }
         renderHome();
@@ -4429,6 +4457,7 @@ async function init() {
     const rec = lib.find((r) => r.id === currentSketchId);
     if (rec && rec.name) currentSketchName = rec.name;
   }
+  updateBoardTitle();
   // Default interaction mode is node creation
   setMode('node');
   updateOrientationControls();
