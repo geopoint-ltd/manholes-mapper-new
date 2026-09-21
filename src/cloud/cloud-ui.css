@@ -7,77 +7,219 @@
 
 /* ---------- login ---------- */
 
+/* The screen scrolls rather than centring with justify-content: when the phone
+   keyboard opens, a centred card taller than what is left of the viewport gets
+   its top clipped off-screen with no way to scroll to it. margin-block: auto on
+   the card centres it while there is room and lets it scroll when there is not. */
 .cloud-login {
   position: fixed;
   inset: 0;
   z-index: 2000;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-strong) 100%);
+  gap: 1rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: max(1.25rem, env(safe-area-inset-top, 0px)) 1rem max(1.25rem, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  background:
+    radial-gradient(1100px 600px at 110% -10%, rgba(255, 255, 255, 0.2), transparent 60%),
+    radial-gradient(900px 520px at -10% 110%, rgba(255, 255, 255, 0.12), transparent 60%),
+    linear-gradient(145deg, var(--color-primary) 0%, var(--color-primary-strong) 100%);
 }
 
 .cloud-login__card {
+  margin-block: auto;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  box-sizing: border-box;
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-  padding: 1.5rem;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28), 0 2px 6px rgba(15, 23, 42, 0.12);
+  padding: 2rem 1.75rem 1.5rem;
 }
 
 .cloud-login__brand {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin-bottom: 0.35rem;
+}
+.cloud-login__brand img { height: 38px; width: auto; }
+
+.cloud-login__app {
+  margin: 0.4rem 0 1.1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-primary);
 }
 
-.cloud-login__brand img { height: 34px; width: auto; }
-
 .cloud-login__title {
-  margin: 0 0 0.25rem;
-  font-size: 1.15rem;
+  margin: 0 0 0.3rem;
+  font-size: 1.4rem;
   font-weight: 700;
   text-align: center;
 }
 
 .cloud-login__subtitle {
-  margin: 0 0 1.15rem;
+  margin: 0 0 1.4rem;
   text-align: center;
   color: var(--color-muted);
   font-size: 0.9rem;
+  line-height: 1.45;
 }
+
+.cloud-login__offline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(234, 179, 8, 0.38);
+  color: #a16207;
+}
+.cloud-login__offline[hidden] { display: none; }
+.cloud-login__offline .material-icons { font-size: 18px; }
 
 .cloud-login__error {
   display: none;
-  margin-bottom: 0.85rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
+  margin-bottom: 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
   font-size: 0.88rem;
-  background: rgba(239, 68, 68, 0.12);
+  line-height: 1.4;
+  background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.35);
   color: #b91c1c;
 }
-
 .cloud-login__error.is-visible { display: block; }
 
-.cloud-login__link {
+.cloud-login__field { margin-bottom: 1rem; }
+.cloud-login__field label {
   display: block;
-  margin-top: 0.9rem;
-  text-align: center;
-  background: none;
+  margin-bottom: 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+/* The app's global input rule covers only text and date inputs, so email and
+   password fell back to the browser's bare default boxes. The frame lives on
+   this wrapper instead of the input, so the icon, the input and the eye read as
+   one field. It runs left-to-right because what is typed into it is: an email
+   address and a password are LTR even on a Hebrew screen. */
+.cloud-login__control {
+  direction: ltr;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 50px;
+  padding: 0 0.85rem;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.cloud-login__control:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+.cloud-login__control > .material-icons {
+  flex: 0 0 auto;
+  font-size: 20px;
+  color: var(--color-muted);
+  transition: color 0.15s ease;
+}
+.cloud-login__control:focus-within > .material-icons { color: var(--color-primary); }
+
+.cloud-login__control input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 0.8rem 0;
   border: 0;
-  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
   font: inherit;
-  font-size: 0.86rem;
-  color: var(--color-primary);
+  /* Anything under 16px makes iOS zoom the whole page on focus. */
+  font-size: 16px;
+}
+/* The frame already shows focus; a second ring on the bare input doubles it. */
+.cloud-login__control input:focus,
+.cloud-login__control input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+/* Browser autofill paints its own yellow/blue box over the field. */
+.cloud-login__control input:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-text);
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+.cloud-login__reveal {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-inline-end: -0.45rem;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-muted);
   cursor: pointer;
-  text-decoration: underline;
+}
+.cloud-login__reveal:hover { color: var(--color-text); background: rgba(100, 116, 139, 0.12); }
+.cloud-login__reveal[aria-pressed="true"] { color: var(--color-primary); }
+.cloud-login__reveal .material-icons { font-size: 20px; }
+
+.cloud-login__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 50px;
+  margin-top: 0.4rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.cloud-login__submit:disabled { opacity: 0.8; cursor: progress; }
+.cloud-login__submit.is-busy .material-icons { animation: cloud-login-spin 0.9s linear infinite; }
+@keyframes cloud-login-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cloud-login__submit.is-busy .material-icons { animation: none; }
+}
+
+.cloud-login__help {
+  margin: 1.1rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  line-height: 1.45;
+}
+
+.cloud-login__footer {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+@media (max-width: 480px) {
+  .cloud-login__card { padding: 1.6rem 1.25rem 1.25rem; border-radius: 18px; }
+  .cloud-login__title { font-size: 1.3rem; }
 }
 
 /* ---------- header account chip ---------- */
@@ -275,6 +417,16 @@
 
 @media (prefers-color-scheme: dark) {
   .cloud-login__error { color: #fca5a5; }
+  .cloud-login__offline { color: #fde68a; }
+  /* The logo is dark grey on transparent; on the dark card "geo" vanished.
+     Same answer as the header, which stays light blue for this reason: sit
+     the logo on a light surface rather than recolour the brand. */
+  .cloud-login__brand img {
+    background: #f8fafc;
+    padding: 6px 12px;
+    border-radius: 10px;
+  }
+  .cloud-login__control:focus-within { box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.28); }
   .cloud-badge--submitted { color: #86efac; }
   .cloud-badge--draft { color: #fde68a; }
   .cloud-badge--disabled { color: #fca5a5; }
