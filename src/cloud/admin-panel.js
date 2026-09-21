@@ -4,13 +4,14 @@
 // panel is a convenience, not the boundary.
 
 import { escapeHtml } from '../dom/dom-utils.js';
-import { isAdmin } from '../firebase/auth.js';
+import { isAdmin, getProfile } from '../firebase/auth.js';
 import {
   createMember,
   listUsers,
   setMemberDisabled,
   sendMemberPasswordReset,
   removeMember,
+  setMemberRole,
 } from '../firebase/users.js';
 import { watchSubmittedSketches, deleteMemberSketch } from '../firebase/sketches.js';
 import { listAttachments, formatSize } from '../firebase/attachments.js';
@@ -180,6 +181,7 @@ function renderUsers(users) {
     list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.noMembers'))}</div>`;
     return;
   }
+  const me = getProfile();
   list.innerHTML = users
     .map((u) => {
       const role = u.role === 'admin' ? 'admin' : 'member';
@@ -189,11 +191,23 @@ function renderUsers(users) {
         `<span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>`,
         u.disabled ? `<span class="cloud-badge cloud-badge--disabled">${escapeHtml(t('cloud.disabled'))}</span>` : '',
       ].join('');
-      // An admin cannot block or remove an admin from here — the rules refuse it
-      // anyway — so an admin row carries no buttons rather than dead ones.
-      const actions =
-        role === 'admin'
-          ? ''
+      const isSelf = Boolean(me && me.uid === u.uid);
+      const who = escapeHtml(name);
+      // Your own row: no buttons. The rules refuse changing your own role or
+      // deleting yourself, so any button here could only fail.
+      // Another admin: one button, to demote. Blocking or removing an admin
+      // takes two deliberate steps — demote, then act on them as a worker —
+      // rather than one click on a row that looks like everyone else's.
+      const actions = isSelf
+        ? ''
+        : role === 'admin'
+          ? `
+        <div class="cloud-user__actions">
+          <button class="btn cloud-user__btn" data-act="demote" data-uid="${escapeHtml(u.uid)}" data-name="${who}">
+            <span class="material-icons" aria-hidden="true">remove_moderator</span>
+            <span>${escapeHtml(t('cloud.removeAdmin'))}</span>
+          </button>
+        </div>`
           : `
         <div class="cloud-user__actions">
           <button class="btn cloud-user__btn" data-act="reset" data-email="${escapeHtml(u.email)}">
@@ -204,6 +218,10 @@ function renderUsers(users) {
             <span class="material-icons" aria-hidden="true">${u.disabled ? 'check_circle_outline' : 'block'}</span>
             <span>${escapeHtml(u.disabled ? t('cloud.enable') : t('cloud.disable'))}</span>
           </button>
+          <button class="btn cloud-user__btn" data-act="promote" data-uid="${escapeHtml(u.uid)}" data-name="${who}">
+            <span class="material-icons" aria-hidden="true">admin_panel_settings</span>
+            <span>${escapeHtml(t('cloud.makeAdmin'))}</span>
+          </button>
           <button class="btn cloud-user__btn cloud-user__btn--danger" data-act="remove" data-uid="${escapeHtml(u.uid)}" data-email="${escapeHtml(u.email)}">
             <span class="material-icons" aria-hidden="true">delete_outline</span>
             <span>${escapeHtml(t('cloud.remove'))}</span>
@@ -213,7 +231,7 @@ function renderUsers(users) {
         <div class="cloud-user${u.disabled ? ' is-disabled' : ''}">
           <span class="cloud-user__avatar cloud-user__avatar--${role}" aria-hidden="true">${escapeHtml(initial)}</span>
           <div class="cloud-user__main">
-            <div class="cloud-user__name"><span dir="auto">${escapeHtml(name)}</span>${badges}</div>
+            <div class="cloud-user__name"><span dir="auto">${escapeHtml(name)}</span>${badges}${isSelf ? `<span class="cloud-user__you">(${escapeHtml(t('cloud.you'))})</span>` : ''}</div>
             <div class="cloud-user__email"><span dir="ltr">${escapeHtml(u.email)}</span></div>
           </div>
           ${actions}
@@ -583,6 +601,15 @@ function wire() {
         toast(t('cloud.resetSent'));
       } else if (act === 'toggle') {
         await setMemberDisabled(btn.getAttribute('data-uid'), btn.getAttribute('data-disabled') !== '1');
+        await refreshUsers();
+      } else if (act === 'promote' || act === 'demote') {
+        const promote = act === 'promote';
+        const name = btn.getAttribute('data-name') || '';
+        const question = String(t(promote ? 'cloud.confirmMakeAdmin' : 'cloud.confirmRemoveAdmin')).replace('{name}', name);
+        if (!confirm(question)) return;
+        btn.disabled = true;
+        await setMemberRole(btn.getAttribute('data-uid'), promote ? 'admin' : 'member');
+        toast(t('cloud.roleChanged'));
         await refreshUsers();
       } else if (act === 'remove') {
         const email = btn.getAttribute('data-email');

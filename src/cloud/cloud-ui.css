@@ -930,6 +930,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cloud-user__you { font-size: 0.78rem; font-weight: 500; color: var(--color-muted); }
 .cloud-user.is-disabled .cloud-user__main,
 .cloud-user.is-disabled .cloud-user__avatar { opacity: 0.55; }
 .cloud-user__actions {

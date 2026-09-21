@@ -13,7 +13,7 @@
 
 import { ROLES } from './config.js';
 import { getDb, createSecondaryAuth } from './app.js';
-import { isAdmin } from './auth.js';
+import { isAdmin, getProfile } from './auth.js';
 
 function assertAdmin() {
   if (!isAdmin()) throw new Error('admin-only');
@@ -80,6 +80,28 @@ export async function listUsers() {
  * @param {string} uid
  * @param {boolean} disabled
  */
+/**
+ * Make someone an admin, or take it away. Admin only, and never your own role —
+ * the rules refuse that, so nobody demotes themselves by accident.
+ *
+ * Takes effect in the database at once: the rules re-read the role on every
+ * request, so a demoted admin's next office action is refused even while their
+ * screen still shows the panel. The affected person's app shows the change the
+ * next time it loads their profile.
+ *
+ * The seeded admin also carries an `admin` custom claim, read only by
+ * storage.rules. There is no Storage bucket, so a promoted admin needs no claim.
+ */
+export async function setMemberRole(uid, role) {
+  assertAdmin();
+  if (role !== ROLES.ADMIN && role !== ROLES.MEMBER) throw new Error('unknown-role');
+  const me = getProfile();
+  if (me && me.uid === uid) throw new Error('cannot-change-own-role');
+  const db = await getDb();
+  const { doc, updateDoc } = await import('firebase/firestore');
+  await updateDoc(doc(db, 'users', uid), { role });
+}
+
 export async function setMemberDisabled(uid, disabled) {
   assertAdmin();
   const db = await getDb();
