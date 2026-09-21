@@ -18,16 +18,25 @@ export default defineConfig({
       output: {
         // The main entry file will be emitted as `main.js` in the output
         entryFileNames: 'main.js',
-        // CSS emitted by Vite is placed into a single file called styles.css
-        // rather than using a hash.  This ensures the service worker can
-        // precache the stylesheet reliably.
+        // Only the app's own stylesheet — the one index.html links, which Vite
+        // calls index.css — keeps the fixed name styles.css that the service
+        // worker and firebase.json address it by.
+        //
+        // Everything else is content-hashed under assets/. That includes the CSS
+        // split off with a lazy chunk (cloud-init, help-screen): this rule used
+        // to name those styles.css too, so the build renamed them styles2.css
+        // and styles3.css — fixed names whose content changed every deploy, which
+        // neither the no-cache header nor the service worker's network-first
+        // list covered. Devices kept the old copies, and a redesigned login
+        // shipped its new markup against last week's styles. A hashed name
+        // cannot be stale: new content is a new URL. assets/ is served immutable
+        // for a year, so nothing may live there without a hash.
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
+          const names = assetInfo.names || (assetInfo.name ? [assetInfo.name] : []);
+          if (names.includes('index.css')) {
             return 'styles.css';
           }
-          // Place other assets into the `assets` directory with their original
-          // names (Vite will append a content hash automatically).
-          return 'assets/[name][extname]';
+          return 'assets/[name]-[hash][extname]';
         },
       },
     },
