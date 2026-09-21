@@ -44,87 +44,12 @@ service cloud.firestore {
 
     function validTag(d) {
       return d.name is string && d.name.size() > 0 && d.name.size() <= 40
-        && d.color is string && d.color.matches('^#[0-9a-fA-F]{6}
-      allow read: if isActiveOwner(uid) || isAdmin();
-
-      // First sign-in self-provisioning: a user may create only their own
-      // document, only as a member, and only enabled. Admins are seeded with
-      // the Admin SDK (scripts/seed-admin.mjs), never from the browser.
-      allow create: if isAdmin()
-        || (signedIn()
-            && request.auth.uid == uid
-            && request.resource.data.role == 'member'
-            && request.resource.data.disabled == false);
-
-      // A member may edit their own display name but never their role or the
-      // disabled flag; an admin may change anything except their own role.
-      allow update: if (isAdmin() && !(uid == request.auth.uid
-                                       && request.resource.data.role != resource.data.role))
-        || (isActiveOwner(uid)
-            && request.resource.data.role == resource.data.role
-            && request.resource.data.disabled == resource.data.disabled);
-
-      allow delete: if isAdmin() && uid != request.auth.uid;
-    }
-
-    // A sketch belongs to the member who captured it. Submitting flips a flag;
-    // it never moves the document, so the office reads it where it lies.
-    match /users/{uid}/sketches/{sketchId} {
-      allow read: if isActiveOwner(uid) || isAdmin();
-      // The owner writes the drawing. The office checklist is not theirs to set,
-      // and their tag list may only grow: a worker adds a tag, only an admin
-      // takes one off. The office touches only its checklist and the tags,
-      // never the drawing.
-      allow create: if isActiveOwner(uid)
-        && !request.resource.data.keys().hasAny(officeKeys());
-      allow update: if (isActiveOwner(uid)
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(officeKeys())
-            && request.resource.data.get('tags', []).hasAll(resource.data.get('tags', [])))
-        || (isAdmin()
-            && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(officeKeys().concat(['tags'])));
-      allow delete: if isActiveOwner(uid);
-
-      match /attachments/{attachmentId} {
-        allow read: if isActiveOwner(uid) || isAdmin();
-        // Only the owner adds or removes their own evidence.
-        allow create, update, delete: if isActiveOwner(uid);
-      }
-    }
-
-    // Collection-group read for the office inbox. Scoped to admins, and only
-    // for sketches that were actually sent in.
-    match /{path=**}/sketches/{sketchId} {
-      allow read: if isAdmin();
-    }
-
-    match /{path=**}/attachments/{attachmentId} {
-      allow read: if isAdmin();
-    }
-
-    // Anything not matched above is denied.
-  }
-}
-);
+        && d.color is string && d.color.matches('^#[0-9a-fA-F]{6}$');
     }
 
     // The office checklist on a sketch. Only an admin writes these.
     function officeKeys() {
       return ['office', 'officeUpdatedAt', 'officeUpdatedBy'];
-    }
-
-    // Tags: who in the office handles a batch. Anyone may add one; only the
-    // office may rename, recolour or delete one.
-    match /tags/{tagId} {
-      allow read: if isActiveMember();
-      allow create: if isActiveMember()
-        && request.resource.data.keys().hasOnly(['name', 'color', 'createdBy', 'createdAt'])
-        && request.resource.data.createdBy == request.auth.uid
-        && validTag(request.resource.data);
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'color'])
-        && validTag(request.resource.data);
-      allow delete: if isAdmin();
     }
 
     match /users/{uid} {
@@ -152,10 +77,22 @@ service cloud.firestore {
 
     // A sketch belongs to the member who captured it. Submitting flips a flag;
     // it never moves the document, so the office reads it where it lies.
+    //
+    // The owner writes the drawing. The office checklist is not theirs to set,
+    // and their tag list may only grow: a worker adds a tag, only an admin
+    // takes one off. The office touches only its checklist and the tags, never
+    // the drawing — and may delete a batch it has finished with.
     match /users/{uid}/sketches/{sketchId} {
       allow read: if isActiveOwner(uid) || isAdmin();
-      allow create, update: if isActiveOwner(uid);
-      allow delete: if isActiveOwner(uid);
+      allow create: if isActiveOwner(uid)
+        && !request.resource.data.keys().hasAny(officeKeys());
+      allow update: if (isActiveOwner(uid)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(officeKeys())
+            && request.resource.data.get('tags', []).hasAll(resource.data.get('tags', [])))
+        || (isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(officeKeys().concat(['tags'])));
+      allow delete: if isActiveOwner(uid) || isAdmin();
 
       match /attachments/{attachmentId} {
         allow read: if isActiveOwner(uid) || isAdmin();
@@ -164,14 +101,29 @@ service cloud.firestore {
       }
     }
 
-    // Collection-group read for the office inbox. Scoped to admins, and only
-    // for sketches that were actually sent in.
+    // Collection-group read for the office inbox. Scoped to admins. It does not
+    // filter on status: the inbox query asks only for submitted sketches, but
+    // an admin may read any sketch.
     match /{path=**}/sketches/{sketchId} {
       allow read: if isAdmin();
     }
 
     match /{path=**}/attachments/{attachmentId} {
       allow read: if isAdmin();
+    }
+
+    // Tags: who in the office handles a batch. Anyone may add one; only the
+    // office may rename, recolour or delete one.
+    match /tags/{tagId} {
+      allow read: if isActiveMember();
+      allow create: if isActiveMember()
+        && request.resource.data.keys().hasOnly(['name', 'color', 'createdBy', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && validTag(request.resource.data);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'color'])
+        && validTag(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     // Anything not matched above is denied.
