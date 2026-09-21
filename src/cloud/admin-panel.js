@@ -12,10 +12,21 @@ import {
   sendMemberPasswordReset,
   removeMember,
 } from '../firebase/users.js';
-import { watchSubmittedSketches, listSubmittedSketches } from '../firebase/sketches.js';
+import { watchSubmittedSketches } from '../firebase/sketches.js';
 import { listAttachments, formatSize } from '../firebase/attachments.js';
 import { isStorageConfigured } from '../firebase/config.js';
 import { buildSketchZip, saveBlob, sketchDisplayName } from './sketch-zip.js';
+import {
+  watchTags,
+  createTag,
+  updateTag,
+  deleteTag,
+  addSketchTag,
+  removeSketchTag,
+  setOfficeFlag,
+  OFFICE_FLAGS,
+} from '../firebase/tags.js';
+import { tagRow, tagChip, swatches, wireSwatches, openTagPicker, closeTagPicker } from './tag-picker.js';
 
 let el = null;
 
@@ -38,7 +49,13 @@ function suggestPassword() {
 function formatWhen(value) {
   if (!value) return '';
   const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = window.currentLang === 'en' ? 'en-GB' : 'he-IL';
+  try {
+    return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+  } catch (_) {
+    return date.toLocaleString(locale);
+  }
 }
 
 function build() {
@@ -59,6 +76,7 @@ function build() {
       <div class="cloud-tabs">
         <button class="cloud-tab is-active" data-tab="members">${escapeHtml(t('cloud.tabMembers'))}</button>
         <button class="cloud-tab" data-tab="inbox">${escapeHtml(t('cloud.tabInbox'))}</button>
+        <button class="cloud-tab" data-tab="tags">${escapeHtml(t('cloud.tabTags'))}</button>
       </div>
       <div class="cloud-panel__body">
         <section class="cloud-panel__section is-active" data-section="members">
@@ -114,6 +132,39 @@ function build() {
         </section>
         <section class="cloud-panel__section" data-section="inbox">
           <div class="cloud-list" id="cloudInboxList"></div>
+        </section>
+        <section class="cloud-panel__section" data-section="tags">
+          <form class="cloud-add" id="cloudTagForm" novalidate>
+            <h3 class="cloud-section-title">
+              <span class="material-icons" aria-hidden="true">new_label</span>
+              ${escapeHtml(t('cloud.newTag'))}
+            </h3>
+            <div class="tag-form">
+              <div class="cloud-field tag-form__name">
+                <label for="cloudTagName">${escapeHtml(t('cloud.tagName'))}</label>
+                <input id="cloudTagName" type="text" maxlength="40" autocomplete="off"
+                       placeholder="${escapeHtml(t('cloud.tagNamePlaceholder'))}" />
+              </div>
+              <div class="cloud-field">
+                <label>${escapeHtml(t('cloud.tagColor'))}</label>
+                <div id="cloudTagSwatches"></div>
+              </div>
+              <button type="submit" class="btn btn-primary cloud-add__submit">
+                <span class="material-icons" aria-hidden="true">add</span>
+                <span>${escapeHtml(t('cloud.createTag'))}</span>
+              </button>
+            </div>
+            <p class="cloud-add__note">
+              <span class="material-icons" aria-hidden="true">info_outline</span>
+              <span>${escapeHtml(t('cloud.tagsHint'))}</span>
+            </p>
+          </form>
+          <h3 class="cloud-section-title">
+            <span class="material-icons" aria-hidden="true">local_offer</span>
+            ${escapeHtml(t('cloud.tagsTitle'))}
+            <span class="home-count" id="cloudTagCount"></span>
+          </h3>
+          <div class="cloud-list" id="cloudTagList"></div>
         </section>
       </div>
     </div>
@@ -214,38 +265,164 @@ async function renderInbox() {
 
 /** Draw the inbox from one snapshot. */
 function paintInbox(list, sketches) {
+  lastInbox = sketches;
   inboxCache.clear();
-  sketches.forEach((s) => inboxCache.set(String(s.id), s));
+  sketches.forEach((s) => inboxCache.set(String(s.path), s));
   if (!sketches.length) {
     list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.inboxEmpty'))}</div>`;
     return;
   }
+  const labels = {
+    inDb: t('cloud.officeInDb'),
+    removedFromApp: t('cloud.officeRemovedFromApp'),
+    inTrello: t('cloud.officeInTrello'),
+  };
   list.innerHTML = sketches
-    .map(
-      (s) => `
-      <div class="cloud-row">
-        <div class="cloud-row__main">
-          <div class="cloud-row__title">${escapeHtml(sketchDisplayName(s))}</div>
-          <div class="cloud-row__meta" dir="auto">
-            ${escapeHtml(s.ownerEmail || '')} ·
-            ${escapeHtml(t('cloud.nodes'))}: ${Number(s.nodeCount) || 0} ·
-            ${escapeHtml(t('cloud.lines'))}: ${Number(s.edgeCount) || 0} ·
-            ${escapeHtml(formatWhen(s.submittedAt))}
+    .map((s) => {
+      const path = escapeHtml(s.path);
+      const office = s.office || {};
+      const done = OFFICE_FLAGS.filter((flag) => office[flag] === true).length;
+      const complete = done === OFFICE_FLAGS.length;
+      // Each detail is its own element, so the email (LTR) and the date never
+      // share a bidi run with the Hebrew around them.
+      return `
+      <article class="inbox-row${complete ? ' is-complete' : ''}" data-path="${path}">
+        <div class="inbox-row__top">
+          <div class="inbox-row__main">
+            <div class="inbox-row__title">${escapeHtml(sketchDisplayName(s))}</div>
+            <div class="inbox-row__meta">
+              <span dir="ltr">${escapeHtml(s.ownerEmail || '')}</span>
+              <span>${escapeHtml(t('cloud.nodes'))}: ${Number(s.nodeCount) || 0}</span>
+              <span>${escapeHtml(t('cloud.lines'))}: ${Number(s.edgeCount) || 0}</span>
+              <span dir="ltr">${escapeHtml(formatWhen(s.submittedAt))}</span>
+            </div>
           </div>
-          <div class="cloud-attach-list" data-files-for="${escapeHtml(s.ownerUid || '')}|${escapeHtml(s.id)}"></div>
+          <div class="inbox-row__actions">
+            <button class="btn inbox-btn inbox-btn--primary" data-act="open" data-path="${path}">
+              <span class="material-icons" aria-hidden="true">edit</span>
+              <span>${escapeHtml(t('cloud.open'))}</span>
+            </button>
+            <button class="btn inbox-btn" data-act="zip" data-path="${path}">
+              <span class="material-icons" aria-hidden="true">download</span>
+              <span>${escapeHtml(t('cloud.download'))}</span>
+            </button>
+            ${isStorageConfigured() ? `<button class="btn inbox-btn" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
+          </div>
         </div>
-        <div class="cloud-row__actions">
-          <button class="btn btn-sm btn-primary" data-act="open" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.open'))}</button>
-          <button class="btn btn-sm" data-act="zip" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.download'))}</button>
-          ${isStorageConfigured() ? `<button class="btn btn-sm" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
+        <div class="inbox-row__tags">${tagRow(s.tags || [], panelTags, { removable: true, canAdd: true })}</div>
+        <div class="inbox-row__office" role="group">
+          ${OFFICE_FLAGS.map((flag) => {
+            const on = office[flag] === true;
+            return `<label class="office-check${on ? ' is-on' : ''}">
+                <input type="checkbox" data-office="${flag}" ${on ? 'checked' : ''} />
+                <span>${escapeHtml(labels[flag])}</span>
+              </label>`;
+          }).join('')}
+          <span class="office-progress${complete ? ' is-complete' : ''}">
+            ${complete ? `<span class="material-icons" aria-hidden="true">task_alt</span>${escapeHtml(t('cloud.officeDone'))}` : `${done}/${OFFICE_FLAGS.length}`}
+          </span>
         </div>
-      </div>`
-    )
+        <div class="cloud-attach-list" data-files-for="${escapeHtml(s.ownerUid || '')}|${escapeHtml(s.id)}"></div>
+      </article>`;
+    })
     .join('');
+}
+
+/* ---------------- tags tab ---------------- */
+
+let editingTagId = null;
+
+function renderTagsTab() {
+  if (!el) return;
+  const list = el.querySelector('#cloudTagList');
+  const count = el.querySelector('#cloudTagCount');
+  if (!list) return;
+  if (count) count.textContent = panelTags.length ? String(panelTags.length) : '';
+  if (!panelTags.length) {
+    list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.noTagsYet'))}</div>`;
+    return;
+  }
+  list.innerHTML = panelTags
+    .map((tag) => {
+      const id = escapeHtml(tag.id);
+      if (tag.id === editingTagId) {
+        return `
+        <form class="tag-row tag-row--edit" data-tag-edit-form="${id}" novalidate>
+          <input type="text" class="tag-row__input" maxlength="40" value="${escapeHtml(tag.name)}"
+                 aria-label="${escapeHtml(t('cloud.tagName'))}" />
+          ${swatches(tag.color)}
+          <div class="tag-row__buttons">
+            <button type="submit" class="btn btn-primary tag-row__btn">${escapeHtml(t('save'))}</button>
+            <button type="button" class="btn tag-row__btn" data-tag-cancel>${escapeHtml(t('cancel'))}</button>
+          </div>
+        </form>`;
+      }
+      return `
+        <div class="tag-row">
+          ${tagChip(tag)}
+          <span class="tag-row__spacer"></span>
+          <button type="button" class="tag-row__icon" data-tag-edit="${id}"
+                  title="${escapeHtml(t('cloud.editTag'))}" aria-label="${escapeHtml(t('cloud.editTag'))}">
+            <span class="material-icons" aria-hidden="true">edit</span>
+          </button>
+          <button type="button" class="tag-row__icon tag-row__icon--danger" data-tag-delete="${id}"
+                  title="${escapeHtml(t('cloud.deleteTag'))}" aria-label="${escapeHtml(t('cloud.deleteTag'))}">
+            <span class="material-icons" aria-hidden="true">delete_outline</span>
+          </button>
+        </div>`;
+    })
+    .join('');
+  const form = list.querySelector('[data-tag-edit-form]');
+  if (form) {
+    const color = wireSwatches(form);
+    const input = form.querySelector('.tag-row__input');
+    input.focus();
+    input.select();
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await updateTag(editingTagId, { name: input.value, color: color() });
+        editingTagId = null;
+        renderTagsTab();
+      } catch (err) {
+        toast((err && err.message) || String(err));
+      }
+    });
+  }
+}
+
+function startPanelTags() {
+  if (panelTagsUnsub) return;
+  watchTags((tags) => {
+    panelTags = tags;
+    renderTagsTab();
+    // The inbox shows tag names and colours; keep them current.
+    const inbox = el && el.querySelector('#cloudInboxList');
+    if (inbox && lastInbox.length) paintInbox(inbox, lastInbox);
+  })
+    .then((unsub) => {
+      panelTagsUnsub = unsub;
+    })
+    .catch((err) => console.warn('tag watch failed', err && err.message));
+}
+
+function stopPanelTags() {
+  if (panelTagsUnsub) {
+    try {
+      panelTagsUnsub();
+    } catch (_) {}
+  }
+  panelTagsUnsub = null;
+  closeTagPicker();
 }
 
 /** The sketches currently listed, so a download reuses what was already read. */
 const inboxCache = new Map();
+/** The last inbox snapshot, so a tag change can repaint without a re-read. */
+let lastInbox = [];
+/** The tag catalogue, live while the panel is open. */
+let panelTags = [];
+let panelTagsUnsub = null;
 
 /**
  * Hand the office one archive per sketch: the manholes CSV, the lines CSV and
@@ -255,8 +432,8 @@ const inboxCache = new Map();
  * document that is already in Firestore, which is what lets it work on the free
  * plan where there is no Storage bucket at all.
  */
-async function downloadZip(sketchId, btn) {
-  const sketch = inboxCache.get(String(sketchId));
+async function downloadZip(path, btn) {
+  const sketch = inboxCache.get(String(path));
   if (!sketch) return;
   const label = btn ? btn.textContent : '';
   if (btn) {
@@ -288,8 +465,8 @@ async function downloadZip(sketchId, btn) {
  * to be fetched; it is reshaped into the record form the local library uses and
  * handed to the app, which opens it through its own load path.
  */
-function openInEditor(sketchId) {
-  const s = inboxCache.get(String(sketchId));
+function openInEditor(path) {
+  const s = inboxCache.get(String(path));
   if (!s) return;
   if (typeof window.openSketchRecord !== 'function') {
     toast('cannot open: the editor is not ready');
@@ -349,6 +526,7 @@ function wire() {
         s.classList.toggle('is-active', s.getAttribute('data-section') === name)
       );
       if (name === 'inbox') renderInbox();
+      else if (name === 'tags') renderTagsTab();
       else refreshUsers();
     });
   });
@@ -423,11 +601,101 @@ function wire() {
     }
     const zipBtn = event.target.closest('button[data-act="zip"]');
     if (zipBtn) {
-      downloadZip(zipBtn.getAttribute('data-sketch'), zipBtn);
+      downloadZip(zipBtn.getAttribute('data-path'), zipBtn);
       return;
     }
     const openBtn = event.target.closest('button[data-act="open"]');
-    if (openBtn) openInEditor(openBtn.getAttribute('data-sketch'));
+    if (openBtn) {
+      openInEditor(openBtn.getAttribute('data-path'));
+      return;
+    }
+    const row = event.target.closest('.inbox-row');
+    const sketch = row && inboxCache.get(row.getAttribute('data-path'));
+    if (!sketch) return;
+    if (event.target.closest('[data-tag-add]')) {
+      openTagPicker({
+        catalog: panelTags,
+        exclude: sketch.tags || [],
+        onPick: (tag) => addSketchTag(sketch.ownerUid, sketch.id, tag.id),
+        onCreate: async (draft) => {
+          const tag = await createTag(draft);
+          await addSketchTag(sketch.ownerUid, sketch.id, tag.id);
+        },
+      });
+      return;
+    }
+    const remove = event.target.closest('[data-tag-remove]');
+    if (remove) {
+      remove.disabled = true;
+      removeSketchTag(sketch.ownerUid, sketch.id, remove.getAttribute('data-tag-remove')).catch((err) => {
+        remove.disabled = false;
+        toast((err && err.message) || String(err));
+      });
+    }
+  });
+
+  // The office checklist. The live inbox repaints on the write, so the tick
+  // shown is always what the database holds; on failure, put it back.
+  el.querySelector('#cloudInboxList').addEventListener('change', async (event) => {
+    const box = event.target.closest('input[data-office]');
+    if (!box) return;
+    const row = box.closest('.inbox-row');
+    const sketch = row && inboxCache.get(row.getAttribute('data-path'));
+    if (!sketch) return;
+    const label = box.closest('.office-check');
+    if (label) label.classList.toggle('is-on', box.checked);
+    try {
+      await setOfficeFlag(sketch.ownerUid, sketch.id, box.getAttribute('data-office'), box.checked);
+    } catch (err) {
+      box.checked = !box.checked;
+      if (label) label.classList.toggle('is-on', box.checked);
+      toast((err && err.message) || String(err));
+    }
+  });
+
+  // Tags tab.
+  const tagForm = el.querySelector('#cloudTagForm');
+  tagForm.querySelector('#cloudTagSwatches').innerHTML = swatches();
+  const newTagColor = wireSwatches(tagForm);
+  tagForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = tagForm.querySelector('#cloudTagName');
+    const name = input.value.trim();
+    if (!name) {
+      input.focus();
+      return;
+    }
+    try {
+      await createTag({ name, color: newTagColor() });
+      input.value = '';
+      input.focus();
+    } catch (err) {
+      toast((err && err.message) || String(err));
+    }
+  });
+  el.querySelector('#cloudTagList').addEventListener('click', async (event) => {
+    const edit = event.target.closest('[data-tag-edit]');
+    if (edit) {
+      editingTagId = edit.getAttribute('data-tag-edit');
+      renderTagsTab();
+      return;
+    }
+    if (event.target.closest('[data-tag-cancel]')) {
+      editingTagId = null;
+      renderTagsTab();
+      return;
+    }
+    const del = event.target.closest('[data-tag-delete]');
+    if (del) {
+      const tag = panelTags.find((x) => x.id === del.getAttribute('data-tag-delete'));
+      if (!tag) return;
+      if (!confirm(t('cloud.confirmDeleteTag').replace('{name}', tag.name))) return;
+      try {
+        await deleteTag(tag.id);
+      } catch (err) {
+        toast((err && err.message) || String(err));
+      }
+    }
   });
 }
 
@@ -441,10 +709,12 @@ export function openAdminPanel() {
   }
   el.querySelector('#cloudNewPassword').value = suggestPassword();
   el.classList.add('is-open');
+  startPanelTags();
   refreshUsers();
 }
 
 export function closeAdminPanel() {
   stopInboxSubscription();
+  stopPanelTags();
   if (el) el.classList.remove('is-open');
 }

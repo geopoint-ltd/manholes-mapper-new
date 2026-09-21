@@ -976,3 +976,391 @@
   .cloud-user__btn--danger,
   .cloud-user__btn--danger:hover { color: #fca5a5; }
 }
+
+/* ---------------- tags ---------------- */
+
+/* The tag's colour tints the chip and fills its dot; the name stays in the
+   text colour so it reads in both themes whatever colour was picked.
+   color-mix() needs a 2023 browser; before that the chip falls back to the
+   neutral surface and the dot still carries the colour. */
+.tag-chip {
+  --tag: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 26px;
+  padding: 0 0.6rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  border-color: color-mix(in srgb, var(--tag) 40%, transparent);
+  background: var(--color-bg);
+  background: color-mix(in srgb, var(--tag) 13%, transparent);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.tag-chip__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tag);
+}
+.tag-chip__name { overflow: hidden; text-overflow: ellipsis; }
+.tag-chip__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-inline-end: -0.3rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.tag-chip__x:hover { background: rgba(100, 116, 139, 0.18); color: var(--color-text); }
+.tag-chip__x .material-icons { font-size: 14px; }
+
+.tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 26px;
+  padding: 0 0.6rem 0 0.45rem;
+  box-sizing: border-box;
+  border: 1px dashed var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tag-add:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.tag-add .material-icons { font-size: 15px; }
+
+.sketch-card__tags,
+.inbox-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+.sketch-card__tags { margin-top: 0.35rem; }
+.sketch-card__tags:empty { display: none; }
+
+/* Colour choices. */
+.tag-swatches { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tag-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tag);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+/* A gap ring then a colour ring. The earlier border-in-the-same-colour was
+   invisible: a transparent border already shows the swatch's own colour. */
+.tag-swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--tag);
+  transform: scale(1.05);
+}
+.tag-swatch:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 5px; }
+
+/* ---------------- the "add a tag" picker ---------------- */
+
+.tag-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 2100; /* above the office panel (1900) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+}
+.tag-picker__card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+}
+.tag-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.tag-picker__head h3 { margin: 0; font-size: 1.05rem; }
+.tag-picker__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.tag-picker__close:hover { background: var(--color-bg); }
+.tag-picker__label {
+  margin: 0.5rem 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.tag-picker__list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tag-picker__option {
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.tag-picker__option .tag-chip { height: 32px; padding: 0 0.8rem; font-size: 0.85rem; }
+.tag-picker__option:hover .tag-chip { border-color: var(--tag); }
+.tag-picker__empty { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--color-muted); }
+.tag-picker__new {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--color-border);
+}
+.tag-picker__new .tag-picker__label { margin: 0; }
+.tag-picker__name {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+}
+.tag-picker__name:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+.tag-picker__create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 42px;
+  border-radius: 10px;
+}
+.tag-picker__create .material-icons { font-size: 18px; }
+.tag-picker__error {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #b91c1c;
+}
+.tag-picker__error[hidden] { display: none; }
+@media (max-width: 600px) {
+  /* A sheet from the bottom, where the thumb already is. */
+  .tag-picker { align-items: flex-end; padding: 0; }
+  .tag-picker__card {
+    max-width: none;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: max(1.1rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------------- office inbox rows ---------------- */
+
+.inbox-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+/* A finished batch steps back: a green edge, on the quieter surface. */
+.inbox-row.is-complete {
+  border-inline-start: 4px solid #16a34a;
+  background: var(--color-bg);
+}
+.inbox-row__top {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+.inbox-row__main { flex: 1 1 220px; min-width: 0; }
+.inbox-row__title { font-weight: 700; font-size: 0.97rem; word-break: break-word; }
+.inbox-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+.inbox-row__actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.inbox-btn,
+.inbox-btn:hover {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 34px;
+  padding: 0 0.7rem;
+  border-radius: 9px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.84rem;
+}
+.inbox-btn:hover { background: var(--color-bg); }
+.inbox-btn .material-icons { font-size: 17px; }
+.inbox-btn--primary,
+.inbox-btn--primary:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+/* The checklist reads as three toggles that turn green when done. */
+.inbox-row__office {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--color-border);
+}
+.office-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 0.7rem 0 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+.office-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #16a34a;
+  cursor: pointer;
+}
+.office-check.is-on {
+  border-color: rgba(22, 163, 74, 0.45);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+.office-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-inline-start: auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+.office-progress.is-complete { color: #15803d; }
+.office-progress .material-icons { font-size: 17px; }
+
+/* ---------------- tags tab ---------------- */
+
+.tag-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+#cloudTagForm .cloud-add__note { margin-top: 0.75rem; }
+.tag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.tag-row .tag-chip { height: 30px; font-size: 0.85rem; }
+.tag-row__spacer { flex: 1 1 auto; }
+.tag-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.tag-row__icon:hover { background: var(--color-bg); color: var(--color-text); }
+.tag-row__icon--danger:hover { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+.tag-row__icon .material-icons { font-size: 18px; }
+.tag-row__input {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 0.7rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.tag-row__buttons { display: flex; gap: 0.35rem; margin-inline-start: auto; }
+.tag-row__btn { min-height: 36px; padding: 0 0.85rem; border-radius: 9px; }
+
+@media (max-width: 640px) {
+  .tag-form { grid-template-columns: 1fr; }
+  .tag-form .cloud-add__submit { justify-content: center; min-height: 44px; }
+  .office-check { min-height: 36px; }
+  .office-progress { flex-basis: 100%; margin-inline-start: 0; }
+  .tag-row__input { font-size: 16px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .office-check.is-on,
+  .office-progress.is-complete { color: #86efac; }
+  .tag-picker__error { color: #fca5a5; }
+}

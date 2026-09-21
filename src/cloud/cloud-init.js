@@ -14,9 +14,16 @@ import { startAuthWatch, onProfileChanged, getProfile, isAdmin, signOut } from '
 import { saveSketch, submitSketch, listMySketches } from '../firebase/sketches.js';
 import { uploadAttachment, listAttachments, formatSize } from '../firebase/attachments.js';
 import { showLogin, hideLogin } from './login-screen.js';
+import { watchTags, createTag, addSketchTag, removeSketchTag } from '../firebase/tags.js';
+import { tagRow, openTagPicker, closeTagPicker } from './tag-picker.js';
 
 /** sketchId -> cloud status, so the list can show what has been sent. */
 const cloudStatus = new Map();
+/** sketchId -> tag ids on the cloud copy. */
+const sketchTags = new Map();
+/** The shared tag catalogue, kept live while signed in. */
+let tagCatalog = [];
+let tagsUnsub = null;
 let chipEl = null;
 let listObserver = null;
 
@@ -507,10 +514,85 @@ function decorateList() {
     // wrapper, which those handlers look their elements up in.
     place('extra', wrap.children.length ? wrap : null);
 
+    const tagSlot = card.querySelector('[data-slot="tags"]');
+    if (tagSlot) paintCardTags(tagSlot, String(sketchId));
+
     const box = card.querySelector('[data-cloud="pick"]');
     card.classList.toggle('is-selected', Boolean(box && box.checked));
     if (box) box.addEventListener('change', () => card.classList.toggle('is-selected', box.checked));
   });
+}
+
+/* ---------------- tags on the worker's cards ---------------- */
+
+/**
+ * A card's tags. A worker may add a tag but never take one off — that is the
+ * office's call, and the rules refuse it — so only an admin sees the remove x.
+ */
+function paintCardTags(slot, sketchId) {
+  const current = sketchTags.get(sketchId) || [];
+  slot.innerHTML = tagRow(current, tagCatalog, { removable: isAdmin(), canAdd: true });
+  const add = slot.querySelector('[data-tag-add]');
+  if (add) {
+    add.addEventListener('click', () => {
+      openTagPicker({
+        catalog: tagCatalog,
+        exclude: current,
+        onPick: (tag) => tagMySketch(sketchId, tag.id),
+        onCreate: async (draft) => {
+          const tag = await createTag(draft);
+          // The live catalogue delivers it too; this only saves a blink.
+          if (!tagCatalog.some((x) => x.id === tag.id)) tagCatalog = [...tagCatalog, tag];
+          await tagMySketch(sketchId, tag.id);
+        },
+      });
+    });
+  }
+  slot.querySelectorAll('[data-tag-remove]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const tagId = btn.getAttribute('data-tag-remove');
+      try {
+        await removeSketchTag(getProfile().uid, sketchId, tagId);
+        sketchTags.set(sketchId, (sketchTags.get(sketchId) || []).filter((id) => id !== tagId));
+        decorateList();
+      } catch (err) {
+        toast((err && err.message) || String(err));
+      }
+    });
+  });
+}
+
+async function tagMySketch(sketchId, tagId) {
+  const profile = getProfile();
+  if (!profile) throw new Error('not-signed-in');
+  await addSketchTag(profile.uid, sketchId, tagId);
+  const current = sketchTags.get(sketchId) || [];
+  if (!current.includes(tagId)) sketchTags.set(sketchId, [...current, tagId]);
+  decorateList();
+}
+
+async function watchTagCatalog() {
+  if (tagsUnsub) return;
+  try {
+    tagsUnsub = await watchTags((tags) => {
+      tagCatalog = tags;
+      decorateList();
+    });
+  } catch (err) {
+    console.warn('tag catalogue unavailable', err && err.message);
+  }
+}
+
+function stopTagCatalog() {
+  if (tagsUnsub) {
+    try {
+      tagsUnsub();
+    } catch (_) {}
+  }
+  tagsUnsub = null;
+  tagCatalog = [];
+  sketchTags.clear();
+  closeTagPicker();
 }
 
 function watchList() {
@@ -607,7 +689,11 @@ async function loadCloudStatuses() {
   try {
     const remote = await listMySketches();
     cloudStatus.clear();
-    remote.forEach((s) => cloudStatus.set(String(s.id), s.status || SKETCH_STATUS.DRAFT));
+    sketchTags.clear();
+    remote.forEach((s) => {
+      cloudStatus.set(String(s.id), s.status || SKETCH_STATUS.DRAFT);
+      sketchTags.set(String(s.id), Array.isArray(s.tags) ? s.tags.map(String) : []);
+    });
     decorateList();
     renderSendState(true);
   } catch (err) {
@@ -630,9 +716,11 @@ export function initCloud() {
       watchList();
       loadCloudStatuses();
       watchArrivals();
+      watchTagCatalog();
     } else {
       cloudStatus.clear();
       stopArrivalWatch();
+      stopTagCatalog();
       showLogin();
     }
   });

@@ -3323,5 +3323,6 @@ input.floating-keyboard-active {
 .sketch-card__meta { align-items: center; }
 .sketch-card__tools .sketch-card__icon {
   background: transparent;
+  box-shadow: none; /* .btn's drop shadow read as a grey tile */
   color: var(--color-muted);
 }

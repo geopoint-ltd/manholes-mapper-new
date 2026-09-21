@@ -1514,11 +1514,15 @@ function renderHome() {
   const when = (value) => {
     const d = value ? new Date(value) : null;
     if (!d || Number.isNaN(d.getTime())) return '';
+    let text;
     try {
-      return d.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+      text = d.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
     } catch (_) {
-      return d.toLocaleString();
+      text = d.toLocaleString();
     }
+    // Isolated left-to-right. Inside a Hebrew sentence the comma between date
+    // and time is neutral, so the two number runs swapped: "14:52 ,21.9.2026".
+    return '\u2066' + text + '\u2069';
   };
   lib.forEach((rec) => {
     const id = escapeHtml(rec.id);
@@ -1552,6 +1556,7 @@ function renderHome() {
           <span>${escapeHtml(t('listCounts', (rec.nodes || []).length, (rec.edges || []).length))}</span>
           <span>${escapeHtml(t('listUpdated', when(rec.updatedAt || rec.createdAt)))}</span>
         </div>
+        <div class="sketch-card__tags" data-slot="tags"></div>
         <div class="sketch-card__actions">
           <button class="btn sketch-card__open" data-action="open" data-id="${id}">
             <span class="material-icons" aria-hidden="true">edit</span>
