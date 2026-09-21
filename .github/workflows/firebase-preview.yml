@@ -44,6 +44,20 @@ jobs:
         run: npm ci
 
       - name: Build
+        # The Firebase web config is not secret — every browser that opens the
+        # app receives it — so it lives in repository *variables*, not secrets.
+        # It has to be supplied here because .env.local never leaves the
+        # developer's machine: without these the build is the offline app, with
+        # no sign-in and none of the cloud features the preview exists to show.
+        # Unset variables arrive as empty strings, which is exactly that
+        # dormant build, so nothing breaks before they are added.
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
         run: npm run build
 
       - name: Check the service account is configured
