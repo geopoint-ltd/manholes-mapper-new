@@ -62,26 +62,55 @@ function build() {
       </div>
       <div class="cloud-panel__body">
         <section class="cloud-panel__section is-active" data-section="members">
-          <div class="cloud-form-grid">
-            <div class="field">
-              <label for="cloudNewName">${escapeHtml(t('cloud.memberName'))}</label>
-              <input id="cloudNewName" type="text" />
+          <div class="cloud-add">
+            <h3 class="cloud-section-title">
+              <span class="material-icons" aria-hidden="true">person_add</span>
+              ${escapeHtml(t('cloud.addMemberTitle'))}
+            </h3>
+            <div class="cloud-add__grid">
+              <div class="cloud-field">
+                <label for="cloudNewName">${escapeHtml(t('cloud.memberName'))}</label>
+                <input id="cloudNewName" type="text" autocomplete="off"
+                       placeholder="${escapeHtml(t('cloud.namePlaceholder'))}" />
+              </div>
+              <div class="cloud-field">
+                <label for="cloudNewEmail">${escapeHtml(t('cloud.email'))}</label>
+                <input id="cloudNewEmail" type="email" dir="ltr" autocomplete="off"
+                       autocapitalize="none" spellcheck="false" placeholder="name@geopoint.me" />
+              </div>
+              <div class="cloud-field">
+                <label for="cloudNewPassword">${escapeHtml(t('cloud.password'))}</label>
+                <div class="cloud-field__control">
+                  <input id="cloudNewPassword" type="text" dir="ltr" autocomplete="off"
+                         autocapitalize="none" spellcheck="false" />
+                  <button type="button" class="cloud-field__icon" id="cloudCopyPassword"
+                          title="${escapeHtml(t('cloud.copyPassword'))}" aria-label="${escapeHtml(t('cloud.copyPassword'))}">
+                    <span class="material-icons" aria-hidden="true">content_copy</span>
+                  </button>
+                  <button type="button" class="cloud-field__icon" id="cloudRollPassword"
+                          title="${escapeHtml(t('cloud.newPassword'))}" aria-label="${escapeHtml(t('cloud.newPassword'))}">
+                    <span class="material-icons" aria-hidden="true">refresh</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="field">
-              <label for="cloudNewEmail">${escapeHtml(t('cloud.email'))}</label>
-              <input id="cloudNewEmail" type="email" dir="ltr" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="cloudNewPassword">${escapeHtml(t('cloud.password'))}</label>
-              <input id="cloudNewPassword" type="text" dir="ltr" autocomplete="off" />
+            <div class="cloud-add__foot">
+              <p class="cloud-add__note">
+                <span class="material-icons" aria-hidden="true">info_outline</span>
+                <span>${escapeHtml(t('cloud.passwordNote'))}</span>
+              </p>
+              <button class="btn btn-primary cloud-add__submit" id="cloudCreateMember">
+                <span class="material-icons" aria-hidden="true">person_add</span>
+                <span>${escapeHtml(t('cloud.createMember'))}</span>
+              </button>
             </div>
           </div>
-          <button class="btn btn-primary" id="cloudCreateMember">
-            <span class="material-icons">person_add</span>
-            <span>${escapeHtml(t('cloud.createMember'))}</span>
-          </button>
-          <div class="cloud-note">${escapeHtml(t('cloud.passwordNote'))}</div>
-          <div class="cloud-list" id="cloudUserList" style="margin-top:1rem;"></div>
+          <h3 class="cloud-section-title">
+            <span class="material-icons" aria-hidden="true">group</span>
+            ${escapeHtml(t('cloud.usersTitle'))}
+            <span class="home-count" id="cloudUserCount"></span>
+          </h3>
+          <div class="cloud-list" id="cloudUserList"></div>
         </section>
         <section class="cloud-panel__section" data-section="inbox">
           <div class="cloud-list" id="cloudInboxList"></div>
@@ -94,6 +123,8 @@ function build() {
 
 function renderUsers(users) {
   const list = el.querySelector('#cloudUserList');
+  const count = el.querySelector('#cloudUserCount');
+  if (count) count.textContent = users.length ? String(users.length) : '';
   if (!users.length) {
     list.innerHTML = `<div class="cloud-empty">${escapeHtml(t('cloud.noMembers'))}</div>`;
     return;
@@ -101,24 +132,40 @@ function renderUsers(users) {
   list.innerHTML = users
     .map((u) => {
       const role = u.role === 'admin' ? 'admin' : 'member';
+      const name = String(u.displayName || u.email || '').trim();
+      const initial = (name[0] || '?').toUpperCase();
       const badges = [
         `<span class="cloud-badge cloud-badge--${role}">${escapeHtml(t(`cloud.role_${role}`))}</span>`,
         u.disabled ? `<span class="cloud-badge cloud-badge--disabled">${escapeHtml(t('cloud.disabled'))}</span>` : '',
-      ].join(' ');
+      ].join('');
+      // An admin cannot block or remove an admin from here — the rules refuse it
+      // anyway — so an admin row carries no buttons rather than dead ones.
       const actions =
         role === 'admin'
           ? ''
           : `
-        <button class="btn btn-sm" data-act="reset" data-email="${escapeHtml(u.email)}">${escapeHtml(t('cloud.resetPassword'))}</button>
-        <button class="btn btn-sm" data-act="toggle" data-uid="${escapeHtml(u.uid)}" data-disabled="${u.disabled ? '1' : '0'}">${escapeHtml(u.disabled ? t('cloud.enable') : t('cloud.disable'))}</button>
-        <button class="btn btn-danger btn-sm" data-act="remove" data-uid="${escapeHtml(u.uid)}" data-email="${escapeHtml(u.email)}">${escapeHtml(t('cloud.remove'))}</button>`;
+        <div class="cloud-user__actions">
+          <button class="btn cloud-user__btn" data-act="reset" data-email="${escapeHtml(u.email)}">
+            <span class="material-icons" aria-hidden="true">mail_outline</span>
+            <span>${escapeHtml(t('cloud.resetPassword'))}</span>
+          </button>
+          <button class="btn cloud-user__btn" data-act="toggle" data-uid="${escapeHtml(u.uid)}" data-disabled="${u.disabled ? '1' : '0'}">
+            <span class="material-icons" aria-hidden="true">${u.disabled ? 'check_circle_outline' : 'block'}</span>
+            <span>${escapeHtml(u.disabled ? t('cloud.enable') : t('cloud.disable'))}</span>
+          </button>
+          <button class="btn cloud-user__btn cloud-user__btn--danger" data-act="remove" data-uid="${escapeHtml(u.uid)}" data-email="${escapeHtml(u.email)}">
+            <span class="material-icons" aria-hidden="true">delete_outline</span>
+            <span>${escapeHtml(t('cloud.remove'))}</span>
+          </button>
+        </div>`;
       return `
-        <div class="cloud-row">
-          <div class="cloud-row__main">
-            <div class="cloud-row__title">${escapeHtml(u.displayName || u.email)} ${badges}</div>
-            <div class="cloud-row__meta" dir="ltr">${escapeHtml(u.email)}</div>
+        <div class="cloud-user${u.disabled ? ' is-disabled' : ''}">
+          <span class="cloud-user__avatar cloud-user__avatar--${role}" aria-hidden="true">${escapeHtml(initial)}</span>
+          <div class="cloud-user__main">
+            <div class="cloud-user__name"><span dir="auto">${escapeHtml(name)}</span>${badges}</div>
+            <div class="cloud-user__email"><span dir="ltr">${escapeHtml(u.email)}</span></div>
           </div>
-          <div class="cloud-row__actions">${actions}</div>
+          ${actions}
         </div>`;
     })
     .join('');
@@ -304,6 +351,23 @@ function wire() {
       if (name === 'inbox') renderInbox();
       else refreshUsers();
     });
+  });
+
+  el.querySelector('#cloudRollPassword').addEventListener('click', () => {
+    el.querySelector('#cloudNewPassword').value = suggestPassword();
+  });
+  el.querySelector('#cloudCopyPassword').addEventListener('click', async () => {
+    const input = el.querySelector('#cloudNewPassword');
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (_) {
+      // Clipboard API refused (insecure context or no permission): fall back
+      // to selecting it, so a long-press copy is one step away.
+      input.focus();
+      input.select();
+      return;
+    }
+    toast(t('cloud.passwordCopied'));
   });
 
   el.querySelector('#cloudCreateMember').addEventListener('click', async () => {
