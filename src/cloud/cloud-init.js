@@ -27,6 +27,33 @@ let tagsUnsub = null;
 let chipEl = null;
 let listObserver = null;
 
+/**
+ * A note that this device has a signed-in session, so a reload can skip the
+ * login screen from the first frame instead of showing it while the Firebase
+ * library downloads and the session is restored.
+ *
+ * It holds only the uid — no token, no role — and it grants nothing: every read
+ * and write is still checked by the security rules. It only decides what to
+ * show while the real answer is on its way. Sign-out clears it, so a
+ * signed-out device goes straight to the login screen.
+ */
+const SESSION_HINT_KEY = 'cloud.session';
+
+function hasSessionHint() {
+  try {
+    return Boolean(localStorage.getItem(SESSION_HINT_KEY));
+  } catch (_) {
+    return false;
+  }
+}
+
+function rememberSession(profile) {
+  try {
+    if (profile) localStorage.setItem(SESSION_HINT_KEY, String(profile.uid));
+    else localStorage.removeItem(SESSION_HINT_KEY);
+  } catch (_) {}
+}
+
 function t(key) {
   return typeof window.t === 'function' ? window.t(key) : key;
 }
@@ -707,7 +734,14 @@ export function initCloud() {
   if (!isFirebaseConfigured()) return; // stays a purely local app
   startAuthWatch();
 
+  // With no session on this device, the login screen is the right first
+  // screen — show it now rather than after the library loads. With one, show
+  // the app, and put the login screen up only if the session turns out to be
+  // gone (revoked, or storage cleared).
+  if (!hasSessionHint()) showLogin();
+
   onProfileChanged((profile) => {
+    rememberSession(profile);
     renderChip(profile);
     renderMenuActions(profile);
     renderHomeCloud(profile);

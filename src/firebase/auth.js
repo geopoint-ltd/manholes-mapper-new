@@ -23,6 +23,12 @@ let currentProfile = null;
 /** @type {Set<(profile: Profile|null) => void>} */
 const listeners = new Set();
 let watching = false;
+/**
+ * False until Firebase has looked at the saved session once. Before that
+ * "no profile" means "not known yet", not "signed out" — and reporting it as
+ * signed out is what put the login screen up on every reload.
+ */
+let resolved = false;
 
 function emit() {
   listeners.forEach((fn) => {
@@ -41,13 +47,14 @@ export function isAdmin() {
 }
 
 /**
- * Subscribe to sign-in state. Fires immediately with the current value.
+ * Subscribe to sign-in state. Fires immediately only once the saved session has
+ * been checked; until then the first call arrives with the answer.
  * @param {(profile: Profile|null) => void} fn
  * @returns {() => void} unsubscribe
  */
 export function onProfileChanged(fn) {
   listeners.add(fn);
-  fn(currentProfile);
+  if (resolved) fn(currentProfile);
   return () => listeners.delete(fn);
 }
 
@@ -94,6 +101,7 @@ export async function startAuthWatch() {
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       currentProfile = null;
+      resolved = true;
       emit();
       return;
     }
@@ -111,6 +119,7 @@ export async function startAuthWatch() {
         disabled: false,
       };
     }
+    resolved = true;
     emit();
   });
 }
