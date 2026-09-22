@@ -910,7 +910,7 @@ input.floating-keyboard-active {
   height: 100%;
 }
 #startPanel { display: none; z-index: 10; }
-#homePanel { display: none; z-index: 12; }
+#homePanel { display: none; z-index: 180; /* above canvas chrome (140-160), below the header (200) */ }
 #helpModal { display: none; z-index: 20; }
 #adminModal { display: none; z-index: 22; }
 #startPanel .panel,
@@ -2983,4 +2983,346 @@ input.floating-keyboard-active {
 
   #adminScreenContent,
   #adminModal .admin-content { padding-inline: 0.6rem; }
+}
+
+/* ---- phone: search a manhole straight from the header ---- */
+
+/* Desktop keeps its search box inside #controls; these two are phone-only. */
+#mobileSearchBtn { display: none; }
+
+@media (max-width: 600px) {
+  #mobileSearchBtn {
+    display: inline-flex;
+    padding: 0.4rem 0.6rem;
+    min-height: 36px;
+  }
+  /* Sits just under the header, matching the overflow menu's geometry so the
+     two read as the same surface. One z-index below it, since they never
+     appear together. */
+  #mobileSearchBar {
+    position: fixed;
+    top: 3.5rem;
+    inset-inline: 0.75rem;
+    z-index: 219;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 6px;
+    padding: 0.4rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  #mobileSearchBar .search-input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 44px;
+    /* Anything under 16px makes iOS zoom the whole page on focus. */
+    font-size: 16px;
+  }
+  #mobileSearchBar .search-icon { color: var(--color-muted); }
+  #mobileSearchBar .btn { min-height: 44px; }
+}
+
+/* ---- header: keep the phone buttons together at the edge ---- */
+#headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ---- the sketch list is a screen, not a dialog ---- */
+
+/* It is where a field worker starts and ends the day: their sketches, what
+   has gone to the office and what has not, and how to send it. A 360px box
+   floating over the canvas could show about two rows of that on a phone. */
+#homePanel .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#homeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#homeHead h2 { margin: 0; }
+
+#homePanel #sketchList {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  margin-top: 0.25rem;
+}
+
+/* Stays put while the list scrolls: the reason for opening this screen must
+   not require scrolling to the bottom to reach. */
+#homeActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+#homeActions .btn { width: 100%; justify-content: center; min-height: 44px; }
+
+@media (max-width: 600px) {
+  #homePanel {
+    align-items: stretch;
+    justify-content: stretch;
+    /* The navbar keeps drawing above this sheet, so anything in the first
+       3.5rem was invisible — including the title and the close button. */
+    top: 3.5rem;
+  }
+  #homePanel .panel {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-sizing: border-box;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Desktop keeps a dialog, just a much larger one. */
+@media (min-width: 601px) {
+  #homePanel .panel {
+    width: min(720px, calc(100% - 3rem));
+    height: min(80vh, 900px);
+  }
+}
+
+/* .btn-ghost is white-on-translucent-white — drawn for the blue header, and
+   invisible anywhere else. Every ghost button inside the home screen (the
+   close X, the sign-out icon) takes the surface palette instead. The tokens
+   flip with the theme, so this holds in dark mode too. */
+#homePanel .btn-ghost {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+#homePanel .btn-ghost:hover { background: var(--color-bg); color: var(--color-text); }
+
+/* ---- the board title carries the sketch name now ---- */
+
+/* A sketch name is often a whole sentence ("טבריה ביוב השלמות אזור 9 ...").
+   Left to wrap, it grew the phone header from one line to four, and the home
+   sheet, search bar and menu are all positioned at a fixed 3.5rem below it.
+   One line, ellipsis; the full name stays in the browser tab and on hover. */
+#brand {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+#brand img { flex: 0 0 auto; }
+#appTitle {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#headerActions { flex: 0 0 auto; }
+
+/* ---- navbar: a sketch name, not the wordmark ---- */
+#appTitle.is-sketch,
+.soft-blue-header #appTitle.is-sketch {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--color-text);
+}
+#appTitle.is-sketch::after { display: none; }
+@media (max-width: 600px) {
+  #appTitle.is-sketch { font-size: 0.92rem; }
+}
+
+/* ---- the sketch list ---- */
+
+#homeHead { justify-content: flex-start; gap: 0.5rem; }
+#homeHead h2 { font-size: 1.2rem; }
+#homeCloseBtn { margin-inline-start: auto; }
+.home-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.45rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.home-count:empty { display: none; }
+
+#homePanel #sketchList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.sketch-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.sketch-card:hover { border-color: rgba(37, 99, 235, 0.35); }
+.sketch-card.is-selected {
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.05);
+}
+.sketch-card__pick:empty { display: none; }
+.sketch-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.sketch-card__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.sketch-card .sketch-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: text;
+  word-break: break-word;
+}
+.sketch-card__status:empty { display: none; }
+.sketch-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+.sketch-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.sketch-card__spacer { flex: 1 1 auto; }
+.sketch-card__send:empty { display: none; }
+.sketch-card__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 9px;
+  font-size: 0.88rem;
+}
+.sketch-card__actions .btn .material-icons { font-size: 17px; line-height: 1; }
+.sketch-card__open {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+.sketch-card__open:hover { background: rgba(37, 99, 235, 0.08); }
+.sketch-card__actions .sketch-card__icon {
+  width: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-muted);
+}
+.sketch-card__icon:hover { color: var(--color-text); background: rgba(100, 116, 139, 0.1); }
+/* Delete stays one tap away but no longer shouts in red on every card; it
+   turns red only under the finger or the pointer. */
+.sketch-card__icon--danger:hover {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.08);
+}
+.sketch-card__extra:empty { display: none; }
+
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2rem 1rem;
+  color: var(--color-muted);
+  text-align: center;
+  font-size: 0.92rem;
+}
+.home-empty .material-icons { font-size: 36px; opacity: 0.6; }
+
+/* Import and new side by side, instead of two stacked full-width slabs. */
+.home-actions__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+#homeActions .home-actions__row .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 42px;
+  font-size: 0.9rem;
+}
+#homeActions .home-actions__row .material-icons { font-size: 18px; }
+
+@media (max-width: 600px) {
+  .sketch-card__actions .btn { min-height: 40px; }
+  .sketch-card__actions .sketch-card__icon { width: 40px; }
+}
+
+/* Copy and delete live in the head row's corner: on a phone the action row
+   could not fit Open, Send and both icons, and delete wrapped onto a line of
+   its own. The head row wraps the title instead, never the tools. */
+.sketch-card__head { flex-wrap: nowrap; align-items: flex-start; }
+.sketch-card__head .sketch-title { flex: 0 1 auto; min-width: 0; }
+.sketch-card__tools {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-inline-start: auto;
+  margin-top: -0.3rem;
+  margin-inline-end: -0.35rem;
+}
+.sketch-card__tools .sketch-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 8px;
+}
+.sketch-card__tools .material-icons { font-size: 18px; }
+@media (max-width: 600px) {
+  .sketch-card__tools .sketch-card__icon { width: 38px; height: 38px; }
+}
+#homePanel #sketchList { scrollbar-width: thin; }
+
+/* "Sent" sits at the head of the details line rather than beside the title,
+   where it pushed a name like sketch_2026-09-06 into breaking mid-date. */
+.sketch-card__meta { align-items: center; }
+.sketch-card__tools .sketch-card__icon {
+  background: transparent;
+  box-shadow: none; /* .btn's drop shadow read as a grey tile */
+  color: var(--color-muted);
 }

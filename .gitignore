@@ -42,3 +42,13 @@ lerna-debug.log*
 # Empty legacy directory (can be manually deleted)
 manholes/
 
+# Firebase — real config and credentials stay out of the repo
+.env
+.env.local
+.env.*.local
+serviceAccountKey*.json
+*-firebase-adminsdk-*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

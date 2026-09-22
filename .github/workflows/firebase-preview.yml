@@ -43,7 +43,51 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check the Firebase variables
+        # Each variable must hold one bare value, not the snippet the Firebase
+        # console prints. Pasting the whole const firebaseConfig = {...} block
+        # into VITE_FIREBASE_API_KEY built an app whose "key" was that text, and
+        # every sign-in failed with auth/invalid-api-key while the deploy itself
+        # reported success. Stop here with a readable reason instead.
+        env:
+          API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          if [ -z "$API_KEY$PROJECT_ID$APP_ID" ]; then
+            echo "No Firebase variables set: building the offline app."
+            exit 0
+          fi
+          fail=0
+          if ! [[ "$API_KEY" =~ ^AIza[0-9A-Za-z_-]{35}$ ]]; then
+            echo "::error title=VITE_FIREBASE_API_KEY::Must hold only the key (39 characters starting AIza), not the whole firebaseConfig snippet."
+            fail=1
+          fi
+          if ! [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
+            echo "::error title=VITE_FIREBASE_PROJECT_ID::Must hold only the project id, e.g. manholes-mappers-new."
+            fail=1
+          fi
+          if ! [[ "$APP_ID" =~ ^1:[0-9]+:web:[0-9a-f]+$ ]]; then
+            echo "::error title=VITE_FIREBASE_APP_ID::Must hold only the app id, shaped like 1:1234567890:web:abc123."
+            fail=1
+          fi
+          exit $fail
+
       - name: Build
+        # The Firebase web config is not secret — every browser that opens the
+        # app receives it — so it lives in repository *variables*, not secrets.
+        # It has to be supplied here because .env.local never leaves the
+        # developer's machine: without these the build is the offline app, with
+        # no sign-in and none of the cloud features the preview exists to show.
+        # Unset variables arrive as empty strings, which is exactly that
+        # dormant build, so nothing breaks before they are added.
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
         run: npm run build
 
       - name: Check the service account is configured
@@ -66,7 +110,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: REPLACE-WITH-YOUR-FIREBASE-PROJECT-ID
+          projectId: manholes-mappers-new
           expires: 7d
 
       # This org pins workflow tokens to read-only, which can stop the action

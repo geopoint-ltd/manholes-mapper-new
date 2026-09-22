@@ -27,6 +27,18 @@ if (typeof window !== 'undefined') {
 // We will gradually move logic from main.js into organized modules under src/.
 import './legacy/main.js';
 
+// Optional cloud layer (Firebase auth, roles, sketch sync).
+//
+// Loaded only when a Firebase config is present in the build. Field devices on
+// a local-only build must not pay for the SDK — or for this layer's own code —
+// so the whole thing is a dynamic import behind that check.
+import { isFirebaseConfigured } from './firebase/config.js';
+if (isFirebaseConfigured()) {
+  import('./cloud/cloud-init.js')
+    .then((m) => m.initCloud())
+    .catch((err) => console.warn('cloud layer failed to load', err));
+}
+
 // Initialize floating keyboard for mobile numeric inputs
 // This will only activate on mobile/touch devices
 if (typeof window !== 'undefined') {

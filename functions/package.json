@@ -1,0 +1,11 @@
+{
+  "name": "manholes-mapper-functions",
+  "description": "Optional admin-only callables. Requires the Blaze plan.",
+  "type": "module",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

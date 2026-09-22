@@ -36,6 +36,7 @@ import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
 import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
 import { migrateGraph, SCHEMA_VERSION, takeRemovedEdgeTypeCount } from '../utils/schema-migration.js';
+import { sketchContentKey } from '../utils/stable-json.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
 import * as sketchView from '../features/sketch-view.js';
@@ -101,9 +102,6 @@ const adminModal = document.getElementById('adminModal');
 const adminContent = document.getElementById('adminContent');
 const adminSaveBtn = document.getElementById('adminSaveBtn');
 const adminCancelBtn = document.getElementById('adminCancelBtn');
-const adminImportBtn = document.getElementById('adminImportBtn');
-const adminExportBtn = document.getElementById('adminExportBtn');
-const adminImportFile = document.getElementById('adminImportFile');
 
 // Admin Screen elements (separate screen)
 const adminScreen = document.getElementById('adminScreen');
@@ -111,9 +109,6 @@ const adminScreenContent = document.getElementById('adminScreenContent');
 const adminScreenTitleEl = document.getElementById('adminScreenTitle');
 const adminScreenSaveBtn = document.getElementById('adminScreenSaveBtn');
 const adminScreenCancelBtn = document.getElementById('adminScreenCancelBtn');
-const adminScreenImportBtn = document.getElementById('adminScreenImportBtn');
-const adminScreenExportBtn = document.getElementById('adminScreenExportBtn');
-const adminScreenImportFile = document.getElementById('adminScreenImportFile');
 const mainEl = document.getElementById('main');
 
 // Mobile menu elements
@@ -191,6 +186,27 @@ let creationDate = null;
 let currentSketchId = null; // id in library; null means unsaved new sketch
 let schemaVersion = SCHEMA_VERSION; // stamped on save; older sketches migrate on load
 let currentSketchName = null; // human-friendly name for the sketch
+
+/**
+ * Keep the board's identity visible.
+ *
+ * The navbar shows the current sketch's name — for an imported sketch, the
+ * file it came from — and the browser tab carries it too, so two open tabs
+ * can be told apart. An unnamed sketch falls back to the plain app title.
+ * updateTexts() routes through here, so a language switch cannot clobber it.
+ */
+function updateBoardTitle() {
+  const app = t('appTitle');
+  const name = currentSketchName ? String(currentSketchName).trim() : '';
+  if (appTitleEl) {
+    appTitleEl.textContent = name || app;
+    appTitleEl.title = name ? `${name} — ${app}` : app;
+    // The gradient, extra-bold wordmark style is for the app's name. A file
+    // name set that way shouted across the navbar, so it gets a quiet style.
+    appTitleEl.classList.toggle('is-sketch', Boolean(name));
+  }
+  document.title = name ? `${name} — ${app}` : 'Manhole Mapper (ממפה שוחות)';
+}
 // Every change is written to the library as well as to localStorage. This used
 // to be a toggle, and a device left in manual mode kept its library copy stale:
 // a reload dropped the surveyor on the sketch list, and opening the sketch from
@@ -410,6 +426,14 @@ let adminConfig = (() => {
 function saveAdminConfig() {
   localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(adminConfig));
 }
+
+// The cloud admin panel builds the same CSVs as the local export, so it needs
+// the same column configuration — including whatever the office has customised.
+// Reading the localStorage key directly would miss the defaults applied above
+// when nothing has ever been saved, so hand over the live object instead.
+try {
+  window.getAdminConfig = () => adminConfig;
+} catch (_) {}
 
 function openAdminModal() {
   if (!adminModal || !adminContent) return;
@@ -734,181 +758,7 @@ if (adminSaveBtn) adminSaveBtn.addEventListener('click', () => {
   renderDetails();
   showToast(t('admin.saved'));
 });
-// Admin import/export handlers
-if (adminExportBtn) {
-  adminExportBtn.addEventListener('click', () => {
-    try {
-      const payload = {
-        kind: 'graphSketchAdminConfig',
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        data: adminConfig,
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-      a.href = URL.createObjectURL(blob);
-      a.download = `admin-config_${datePart}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      showToast(t('admin.exportSuccess'));
-    } catch (_) {
-      // no-op
-    }
-  });
-}
 
-if (adminImportBtn && adminImportFile) {
-  adminImportBtn.addEventListener('click', () => {
-    adminImportFile.value = '';
-    adminImportFile.click();
-  });
-  adminImportFile.addEventListener('change', async () => {
-    const file = adminImportFile.files && adminImportFile.files[0];
-    if (!file) return;
-    try {
-      let text = await file.text();
-      // Strip BOM and trim to be tolerant of editors that add BOM/newlines
-      if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      text = text.trim();
-      const parsed = JSON.parse(text);
-      // Accept both wrapped and raw formats
-      const incoming = (parsed && parsed.kind === 'graphSketchAdminConfig' && parsed.data)
-        ? parsed.data
-        : (parsed && parsed.nodes && parsed.edges)
-          ? parsed
-          : null;
-      if (!incoming) {
-        showToast(t('admin.importInvalid'));
-        return;
-      }
-      // Basic shape validation and normalization
-      function normalize(config) {
-        const merged = { ...JSON.parse(JSON.stringify(defaultAdminConfig)), ...config };
-        merged.nodes = merged.nodes || {};
-        merged.edges = merged.edges || {};
-        const incNodes = { ...defaultAdminConfig.nodes.include, ...(merged.nodes.include||{}) };
-        const incEdges = { ...defaultAdminConfig.edges.include, ...(merged.edges.include||{}) };
-        // Coerce include flags to booleans
-        Object.keys(incNodes).forEach(k => { incNodes[k] = !!incNodes[k]; });
-        Object.keys(incEdges).forEach(k => { incEdges[k] = !!incEdges[k]; });
-        merged.nodes.include = incNodes;
-        merged.edges.include = incEdges;
-        merged.nodes.defaults = { ...defaultAdminConfig.nodes.defaults, ...(merged.nodes.defaults||{}) };
-        merged.edges.defaults = { ...defaultAdminConfig.edges.defaults, ...(merged.edges.defaults||{}) };
-        merged.nodes.options = { ...defaultAdminConfig.nodes.options, ...(merged.nodes.options||{}) };
-        merged.edges.options = { ...defaultAdminConfig.edges.options, ...(merged.edges.options||{}) };
-        // customFields removed
-        // Ensure options rows have enabled defaulting to true
-        ['nodes','edges'].forEach(scope => {
-          const opt = merged[scope].options || {};
-          Object.keys(opt).forEach(key => {
-            const arr = Array.isArray(opt[key]) ? opt[key] : [];
-            opt[key] = arr.map(o => ({ ...o, enabled: o && o.enabled === false ? false : true }));
-          });
-        });
-        return merged;
-      }
-      adminConfig = normalize(incoming);
-      saveAdminConfig();
-      // Re-render admin UI to reflect imported settings if modal is open
-      if (adminModal) openAdminModal();
-      // If user is on the dedicated admin screen, refresh it as well
-      try {
-        if (document.body && document.body.classList && document.body.classList.contains('admin-screen')) {
-          openAdminScreen();
-        }
-      } catch (_) {}
-      // Also refresh details panel options
-      renderDetails();
-      showToast(t('admin.importSuccess'));
-    } catch (_) {
-      console.warn('Admin import failed', _);
-      showToast(t('admin.importInvalid'));
-    }
-  });
-}
-
-// Admin screen import/export handlers mirror modal handlers
-if (adminScreenExportBtn) {
-  adminScreenExportBtn.addEventListener('click', () => {
-    try {
-      const payload = { kind: 'graphSketchAdminConfig', version: 1, exportedAt: new Date().toISOString(), data: adminConfig };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-      a.href = URL.createObjectURL(blob);
-      a.download = `admin-config_${datePart}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      showToast(t('admin.exportSuccess'));
-    } catch (_) {}
-  });
-}
-if (adminScreenImportBtn && adminScreenImportFile) {
-  adminScreenImportBtn.addEventListener('click', () => {
-    adminScreenImportFile.value = '';
-    adminScreenImportFile.click();
-  });
-  adminScreenImportFile.addEventListener('change', async () => {
-    const file = adminScreenImportFile.files && adminScreenImportFile.files[0];
-    if (!file) return;
-    try {
-      // Preserve currently active tab before rebuild
-      const prevTab = (function() {
-        try {
-          const activeBtn = adminScreenContent && adminScreenContent.querySelector('.admin-tabs .tab.active');
-          return activeBtn ? activeBtn.getAttribute('data-tab-btn') : null;
-        } catch (_) { return null; }
-      })();
-      let text = await file.text();
-      if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      text = text.trim();
-      const parsed = JSON.parse(text);
-      const incoming = (parsed && parsed.kind === 'graphSketchAdminConfig' && parsed.data)
-        ? parsed.data
-        : (parsed && parsed.nodes && parsed.edges)
-          ? parsed
-          : null;
-      if (!incoming) { showToast(t('admin.importInvalid')); return; }
-      function normalize(config) {
-        const merged = { ...JSON.parse(JSON.stringify(defaultAdminConfig)), ...config };
-        merged.nodes = merged.nodes || {};
-        merged.edges = merged.edges || {};
-        const incNodes = { ...defaultAdminConfig.nodes.include, ...(merged.nodes.include||{}) };
-        const incEdges = { ...defaultAdminConfig.edges.include, ...(merged.edges.include||{}) };
-        Object.keys(incNodes).forEach(k => { incNodes[k] = !!incNodes[k]; });
-        Object.keys(incEdges).forEach(k => { incEdges[k] = !!incEdges[k]; });
-        merged.nodes.include = incNodes;
-        merged.edges.include = incEdges;
-        // customFields removed
-        merged.nodes.options = merged.nodes.options || {};
-        merged.edges.options = merged.edges.options || {};
-        merged.nodes.defaults = merged.nodes.defaults || {};
-        merged.edges.defaults = merged.edges.defaults || {};
-        return merged;
-      }
-      adminConfig = normalize(incoming);
-      saveAdminConfig();
-      try { openAdminScreen(); } catch (_) {}
-      // Restore previously selected tab if applicable
-      try {
-        if (prevTab && prevTab !== 'nodes') {
-          const tabs = adminScreenContent && adminScreenContent.querySelector('.admin-tabs');
-          const btn = tabs && tabs.querySelector(`[data-tab-btn="${prevTab}"]`);
-          if (btn && typeof btn.click === 'function') btn.click();
-        }
-      } catch (_) {}
-      // Refresh details panel to reflect updated dropdown options
-      try { renderDetails(); } catch (_) {}
-      showToast(t('admin.importSuccess'));
-    } catch (_) {
-      showToast(t('admin.importInvalid'));
-    }
-  });
-}
 
 // Admin screen save/cancel
 if (adminScreenSaveBtn) adminScreenSaveBtn.addEventListener('click', () => {
@@ -1020,7 +870,7 @@ if (window.ResizeObserver) {
 // use global t/isRTL injected from module entry
 
 function applyLangToStaticUI() {
-  if (appTitleEl) appTitleEl.textContent = t('appTitle');
+  updateBoardTitle();
   // Helper to set a button's visible label if it has a `.label` span
   const setBtnLabel = (btn, text) => {
     if (!btn) return;
@@ -1177,28 +1027,6 @@ function applyLangToStaticUI() {
   }
   // Update edge legend alignment per language
   renderEdgeLegend();
-  // Update labels for admin import/export buttons
-  if (adminImportBtn) {
-    const lbl = adminImportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.import');
-    adminImportBtn.title = t('admin.import');
-  }
-  if (adminExportBtn) {
-    const lbl = adminExportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.export');
-    adminExportBtn.title = t('admin.export');
-  }
-  // Admin Screen import/export
-  if (typeof adminScreenImportBtn !== 'undefined' && adminScreenImportBtn) {
-    const lbl = adminScreenImportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.import');
-    adminScreenImportBtn.title = t('admin.import');
-  }
-  if (typeof adminScreenExportBtn !== 'undefined' && adminScreenExportBtn) {
-    const lbl = adminScreenExportBtn.querySelector('.label');
-    if (lbl) lbl.textContent = t('admin.export');
-    adminScreenExportBtn.title = t('admin.export');
-  }
   // Update admin action buttons (modal)
   if (typeof adminCancelBtn !== 'undefined' && adminCancelBtn) {
     adminCancelBtn.textContent = t('cancel');
@@ -1218,9 +1046,22 @@ function applyLangToStaticUI() {
     searchNodeInput.placeholder = t('searchNode');
     searchNodeInput.title = t('searchNodeTitle');
   }
-  if (typeof mobileSearchNodeInput !== 'undefined' && mobileSearchNodeInput) {
-    mobileSearchNodeInput.placeholder = t('searchNode');
-    mobileSearchNodeInput.title = t('searchNodeTitle');
+  if (typeof mobileSearchBarInput !== 'undefined' && mobileSearchBarInput) {
+    mobileSearchBarInput.placeholder = t('searchNode');
+    mobileSearchBarInput.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchBtn !== 'undefined' && mobileSearchBtn) {
+    mobileSearchBtn.title = t('searchNodeTitle');
+  }
+  if (typeof mobileSearchCloseBtn !== 'undefined' && mobileSearchCloseBtn) {
+    mobileSearchCloseBtn.title = t('close');
+  }
+  if (typeof homeCloseBtn !== 'undefined' && homeCloseBtn) {
+    homeCloseBtn.title = t('close');
+  }
+  if (typeof homeImportBtn !== 'undefined' && homeImportBtn) {
+    setBtnLabel(homeImportBtn, t('homeImport'));
+    homeImportBtn.title = t('importSketch');
   }
 }
 
@@ -1304,6 +1145,7 @@ function loadFromStorage() {
     creationDate = parsed.creationDate || null;
     currentSketchId = parsed.sketchId || null;
     currentSketchName = parsed.sketchName || null;
+    updateBoardTitle();
     // Ensure each node has required properties
     nodes.forEach((node) => {
       if (node.material === undefined) node.material = NODE_MATERIALS[0];
@@ -1391,7 +1233,28 @@ function saveToStorage() {
   localStorage.setItem('graphSketch', JSON.stringify(payload));
   // Persist to IndexedDB for durability
   idbSaveCurrentCompat(payload);
-  saveToLibrary();
+  const saved = saveToLibrary();
+  markCurrentSaved(saved);
+}
+
+// Which library version `graphSketch` was last saved as, written only once the
+// library write has succeeded. Startup needs it to tell whether graphSketch is
+// ahead of the library (a library write that failed) or behind it: sync can
+// now bring a newer version of a sketch into the library, or remove it, while
+// graphSketch still holds the old drawing. See ensureCurrentSketchInLibrary().
+function markCurrentSaved(saved) {
+  try {
+    if (saved) localStorage.setItem('graphSketch.savedAs', JSON.stringify({ id: saved.id, rev: saved.rev || null }));
+  } catch (_) {}
+}
+
+function readCurrentMark() {
+  try {
+    const mark = JSON.parse(localStorage.getItem('graphSketch.savedAs') || 'null');
+    return mark && mark.id ? mark : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 // Debounced saver to reduce jank on mobile while typing
@@ -1399,14 +1262,51 @@ const debouncedSaveToStorage = (function () {
   /** @type {number|undefined} */
   let timeoutId;
   const delayMs = 150;
-  return function () {
+  const schedule = function () {
     if (timeoutId) clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       timeoutId = undefined;
       try { saveToStorage(); } catch (_) {}
     }, delayMs);
   };
+  /** Run a save that is still waiting out the delay, now. No-op otherwise. */
+  schedule.flush = function () {
+    if (!timeoutId) return;
+    clearTimeout(timeoutId);
+    timeoutId = undefined;
+    try { saveToStorage(); } catch (_) {}
+  };
+  return schedule;
 })();
+
+// Leaving the app — switching to WhatsApp or the camera, locking the phone — is
+// when a mobile browser may freeze this page, or discard it, without warning.
+// Most edits are already saved by then, but not all: the manhole number and a
+// sketch's name commit only when their field is left, and an edit can still be
+// inside the autosave delay above. Finish all of it before the page goes.
+//
+// Only the fields that commit on leaving are touched; everything else saves as
+// it is typed.
+function saveBeforeLeaving() {
+  try {
+    commitIdInputIfFocused();
+  } catch (_) {}
+  try {
+    const active = document.activeElement;
+    // The home list's rename field commits on blur or Enter. Send the Enter:
+    // a page on its way to the background often has no focus to lose, so
+    // blur() there fires nothing and the new name would never be saved.
+    if (active && active.tagName === 'INPUT' && active.closest && active.closest('#sketchList')) {
+      active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    }
+  } catch (_) {}
+  debouncedSaveToStorage.flush();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveBeforeLeaving();
+});
+// Some browsers skip visibilitychange when a page is closed outright.
+window.addEventListener('pagehide', saveBeforeLeaving);
 
 /**
  * Remove the stored sketch from localStorage.
@@ -1429,6 +1329,52 @@ function getLibrary() {
     console.error('Failed to parse library', e);
     return [];
   }
+}
+
+/**
+ * Version bookkeeping for cross-device sync (see src/cloud/sync-plan.js).
+ *
+ * A record gets a new `rev` only when its contents change. That matters more
+ * than it looks: opening a sketch re-saves it, and startup rewrites the open
+ * one, and if either counted as an edit, every device that received a version
+ * would "change" it and send it back — an endless round of updates between
+ * phones. So a save whose drawing and name are unchanged keeps the rev, the
+ * sync marks, and even the updatedAt that the sketch list shows.
+ *
+ * `revs` is the history the rev grew from; `syncedRev` and `ownerUid` are the
+ * sync layer's, carried across saves untouched.
+ */
+function newRev() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function withSyncMeta(existing, next) {
+  const changed = !existing || sketchContentKey(existing) !== sketchContentKey(next);
+  if (!changed) {
+    return {
+      ...next,
+      updatedAt: existing.updatedAt || next.updatedAt,
+      rev: existing.rev,
+      revs: existing.revs,
+      syncedRev: existing.syncedRev,
+      ownerUid: existing.ownerUid,
+    };
+  }
+  const rev = newRev();
+  // A record from before revs existed descends from a stand-in built from its
+  // updatedAt — the same stand-in the sync layer gives its cloud copy.
+  const base = existing
+    ? (Array.isArray(existing.revs) && existing.revs.length
+        ? existing.revs
+        : [existing.rev || `u:${existing.updatedAt || existing.createdAt || ''}`])
+    : [];
+  return {
+    ...next,
+    rev,
+    revs: [...base, rev].slice(-50),
+    syncedRev: existing ? existing.syncedRev : undefined,
+    ownerUid: existing ? existing.ownerUid : undefined,
+  };
 }
 
 function setLibrary(list) {
@@ -1454,6 +1400,7 @@ function saveToLibrary() {
     schemaVersion,
   };
   const idx = lib.findIndex((s) => s.id === record.id);
+  let saved;
   if (idx >= 0) {
     // Preserve existing name if current is null, so we don't accidentally clear it
     const existing = lib[idx];
@@ -1461,14 +1408,21 @@ function saveToLibrary() {
     if ((record.name == null || record.name === '') && (existing.name != null && existing.name !== '')) {
       merged.name = existing.name;
     }
-    lib[idx] = merged;
+    saved = withSyncMeta(existing, merged);
+    lib[idx] = saved;
   } else {
-    lib.unshift(record);
+    saved = withSyncMeta(null, record);
+    lib.unshift(saved);
   }
   setLibrary(lib);
   currentSketchId = record.id;
   // Mirror into IndexedDB
-  idbSaveRecordCompat(record);
+  idbSaveRecordCompat(saved);
+  // Announce the write so optional layers (e.g. cloud sync) can mirror it.
+  try {
+    window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: record.id } }));
+  } catch (_) {}
+  return saved;
 }
 
 function loadFromLibrary(sketchId) {
@@ -1520,6 +1474,7 @@ function loadFromLibrary(sketchId) {
   creationDate = rec.creationDate || rec.createdAt || null;
   currentSketchId = rec.id;
   currentSketchName = rec.name || null;
+  updateBoardTitle();
   // Recover option values truncated by the old unescaped drawer markup
   repairTruncatedOptionValues(nodes, edges, adminConfig);
   computeNodeTypes();
@@ -1533,14 +1488,26 @@ function loadFromLibrary(sketchId) {
 
 function deleteFromLibrary(sketchId) {
   const lib = getLibrary();
+  const deleted = lib.find((r) => r.id === sketchId) || null;
   const filtered = lib.filter((r) => r.id !== sketchId);
   setLibrary(filtered);
+  // Other devices should drop it too. The record goes with the event because
+  // it is no longer in the library to be looked up.
+  try {
+    window.dispatchEvent(new CustomEvent('sketch:deleted', { detail: { id: sketchId, record: deleted } }));
+  } catch (_) {}
   if (currentSketchId === sketchId) {
     currentSketchId = null;
   }
   // Remove from IndexedDB
   idbDeleteRecordCompat(sketchId);
 }
+
+// Set when graphSketch holds a sketch deleted since it was last saved, so
+// startup does not put it back on the canvas either: shown there as the current
+// sketch, the next edit would save it again, and sync would restore it on every
+// device. graphSketch itself is left alone; the next sketch overwrites it.
+let startupSketchWasDeleted = false;
 
 /**
  * Make sure the sketch in `graphSketch` also exists in the library, and is the
@@ -1569,6 +1536,26 @@ function ensureCurrentSketchInLibrary() {
     const id = parsed.sketchId || generateSketchId();
     const idx = lib.findIndex((r) => r && r.id === id);
     const existing = idx >= 0 ? lib[idx] : null;
+
+    // graphSketch is ahead of the library only when a library write failed
+    // after it. When its last save did reach the library, the mark says as
+    // what version, and a library that has moved on since was changed by sync
+    // (a newer version from another device) or had the sketch removed (deleted
+    // here, or on another device). Writing graphSketch back then would undo
+    // that — overwrite another device's newer work, or bring back a deleted
+    // sketch — so the library stands.
+    const mark = readCurrentMark();
+    if (mark && parsed.sketchId && mark.id === id) {
+      if (!existing) {
+        startupSketchWasDeleted = true;
+        return;
+      }
+      if ((existing.rev || null) !== mark.rev) {
+        currentSketchId = id;
+        return;
+      }
+    }
+
     const nowIso = new Date().toISOString();
     const record = {
       id,
@@ -1583,9 +1570,11 @@ function ensureCurrentSketchInLibrary() {
       schemaVersion: parsed.schemaVersion,
     };
     // Replace this one entry. Rewriting the whole array would delete every
-    // other sketch on the device.
-    if (idx >= 0) lib[idx] = record;
-    else lib.unshift(record);
+    // other sketch on the device. The sync marks carry over, and an unchanged
+    // drawing is not an edit — see withSyncMeta().
+    const saved = withSyncMeta(existing, record);
+    if (idx >= 0) lib[idx] = saved;
+    else lib.unshift(saved);
     setLibrary(lib);
     currentSketchId = id;
 
@@ -1597,47 +1586,193 @@ function ensureCurrentSketchInLibrary() {
       parsed.sketchId = id;
       localStorage.setItem('graphSketch', JSON.stringify(parsed));
     }
-    idbSaveRecordCompat(record);
+    idbSaveRecordCompat(saved);
   } catch (e) {
     console.warn('Could not mirror the current sketch into the library', e);
   }
 }
+
+// Open a sketch that arrived from the cloud in this same editor.
+//
+// The record joins the local library and is then loaded through loadFromLibrary
+// like any other sketch, so it gets the identical schema migration, back-compat
+// defaults and rendering. Anything that reimplemented that here would drift.
+//
+// Note the consequence, which is deliberate rather than accidental: once opened
+// the sketch is in this device's library, so the signed-in user's own cloud
+// sync will mirror it under their account on the next save. For the office that
+// is the point — they are taking a copy to work on.
+try {
+  window.openSketchRecord = (record) => {
+    if (!record || !record.id) return false;
+    const lib = getLibrary();
+    const id = String(record.id);
+    const idx = lib.findIndex((r) => String(r.id) === id);
+    if (idx >= 0) lib[idx] = { ...lib[idx], ...record };
+    else lib.push(record);
+    setLibrary(lib);
+    const opened = loadFromLibrary(id);
+    if (opened) hideHome();
+    return opened;
+  };
+} catch (_) {}
+
+/**
+ * What an unnamed sketch is called: the day it was drawn, DD-MM-YYYY. That is
+ * how the crews write and file a survey, and it matches what the office sees
+ * for the same sketch (sketchDisplayName in src/cloud/sketch-zip.js) — the old
+ * fallback was the raw id and an ISO timestamp.
+ */
+function fallbackSketchTitle(rec) {
+  const raw = rec.creationDate || rec.createdAt || '';
+  const pad = (n) => String(n).padStart(2, '0');
+  // A bare date from the date picker is read as the date it says, not as UTC
+  // midnight shifted into the local zone.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw));
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  const d = new Date(raw);
+  if (raw && !Number.isNaN(d.getTime())) {
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return String(rec.id);
+}
+
+// What the cloud sync layer uses to change this device's library.
+//
+// Its writes are not edits: nothing here bumps a rev or fires sketch:saved, so
+// a sketch arriving from another device is not immediately sent back. It keeps
+// IndexedDB in step, refreshes the sketch list if it is showing, and can reload
+// the open sketch when a newer version of it arrives.
+try {
+  window.sketchLibrary = {
+    list: () => getLibrary(),
+    openId: () => currentSketchId,
+    // The title the sketch list shows: its name, or its date.
+    title: (rec) => (rec && rec.name) || (rec ? fallbackSketchTitle(rec) : ''),
+    put(records) {
+      if (!records || !records.length) return;
+      const lib = getLibrary();
+      for (const rec of records) {
+        const idx = lib.findIndex((r) => String(r.id) === String(rec.id));
+        if (idx >= 0) lib[idx] = rec;
+        else lib.unshift(rec);
+        idbSaveRecordCompat(rec);
+      }
+      setLibrary(lib);
+      if (homePanel && homePanel.style.display === 'flex') renderHome();
+    },
+    // Several records' sync marks in one write: the library is one JSON value,
+    // and rewriting it once per sketch makes a first sign-in with a long list
+    // of sketches crawl.
+    patch(changes) {
+      if (!changes || !changes.length) return;
+      const lib = getLibrary();
+      const touched = [];
+      for (const { id, fields } of changes) {
+        const idx = lib.findIndex((r) => String(r.id) === String(id));
+        if (idx < 0) continue;
+        lib[idx] = { ...lib[idx], ...fields };
+        touched.push(lib[idx]);
+      }
+      if (!touched.length) return;
+      setLibrary(lib);
+      touched.forEach((rec) => idbSaveRecordCompat(rec));
+    },
+    // An edit still inside the autosave delay is on the canvas but not yet in
+    // the library. Sync reads the library, so it saves that edit first —
+    // otherwise it could take a newer version from the cloud over it.
+    flush() {
+      debouncedSaveToStorage.flush();
+    },
+    remove(ids) {
+      if (!ids || !ids.length) return;
+      const drop = new Set(ids.map(String));
+      setLibrary(getLibrary().filter((r) => !drop.has(String(r.id))));
+      ids.forEach((id) => idbDeleteRecordCompat(id));
+      if (homePanel && homePanel.style.display === 'flex') renderHome();
+    },
+    // loadFromLibrary re-saves the sketch, but with its drawing unchanged that
+    // is not an edit (withSyncMeta), so this does not bounce back to the cloud.
+    reloadOpen() {
+      if (currentSketchId) loadFromLibrary(currentSketchId);
+    },
+  };
+} catch (_) {}
 
 function renderHome() {
   if (!homePanel || !sketchListEl) return;
   startPanel.style.display = 'none';
   homePanel.style.display = 'flex';
   const lib = getLibrary();
+  const countEl = document.getElementById('homeCount');
+  if (countEl) countEl.textContent = lib.length ? String(lib.length) : '';
   sketchListEl.innerHTML = '';
   if (lib.length === 0) {
-    const empty = document.createElement('div');
-    empty.textContent = t('noSketches');
-    sketchListEl.appendChild(empty);
-  } else {
-    lib.forEach((rec) => {
-      const item = document.createElement('div');
-      item.style.border = '1px solid var(--color-border)';
-      item.style.borderRadius = '8px';
-      item.style.padding = '0.5rem';
-      item.style.marginBottom = '0.5rem';
-    const displayName = rec.name && String(rec.name).trim().length > 0 ? rec.name : null;
-    const title = displayName || t('listTitle', rec.id.slice(-6), (rec.creationDate || rec.createdAt));
-      item.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div>
-            <div class="sketch-title" data-id="${rec.id}" style="font-weight:bold;cursor:text;">${title}</div>
-            <div style="font-size:0.85rem;color:var(--color-muted);">${t('listUpdated', new Date(rec.updatedAt || rec.createdAt).toLocaleString())}</div>
-            <div style="font-size:0.85rem;color:var(--color-muted);">${t('listCounts', (rec.nodes||[]).length, (rec.edges||[]).length)}</div>
-          </div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn" data-action="open" data-id="${rec.id}">${t('listOpen')}</button>
-            <button class="btn" data-action="duplicate" data-id="${rec.id}">${t('listDuplicate')}</button>
-            <button class="btn btn-danger" data-action="delete" data-id="${rec.id}">${t('listDelete')}</button>
-          </div>
-        </div>`;
-      sketchListEl.appendChild(item);
-    });
+    sketchListEl.innerHTML = `
+      <div class="home-empty">
+        <span class="material-icons" aria-hidden="true">note_add</span>
+        <div>${escapeHtml(t('noSketches'))}</div>
+      </div>`;
+    return;
   }
+  const locale = currentLang === 'he' ? 'he-IL' : 'en-GB';
+  const when = (value) => {
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) return '';
+    let text;
+    try {
+      text = d.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+    } catch (_) {
+      text = d.toLocaleString();
+    }
+    // Isolated left-to-right. Inside a Hebrew sentence the comma between date
+    // and time is neutral, so the two number runs swapped: "14:52 ,21.9.2026".
+    return '\u2066' + text + '\u2069';
+  };
+  lib.forEach((rec) => {
+    const id = escapeHtml(rec.id);
+    const hasName = rec.name && String(rec.name).trim().length > 0;
+    // Names come from people and from imported file names, so they are text,
+    // never markup.
+    const title = escapeHtml(hasName ? rec.name : fallbackSketchTitle(rec));
+    const card = document.createElement('article');
+    card.className = 'sketch-card';
+    card.dataset.sketchId = rec.id;
+    // The empty data-slot elements are where the cloud layer, when signed in,
+    // puts the tick box, the "sent" badge and the send button.
+    card.innerHTML = `
+      <div class="sketch-card__pick" data-slot="pick"></div>
+      <div class="sketch-card__body">
+        <div class="sketch-card__head">
+          <div class="sketch-title" data-id="${id}">${title}</div>
+          <span class="sketch-card__tools">
+            <button class="btn sketch-card__icon" data-action="duplicate" data-id="${id}"
+                    title="${escapeHtml(t('listDuplicate'))}" aria-label="${escapeHtml(t('listDuplicate'))}">
+              <span class="material-icons" aria-hidden="true">content_copy</span>
+            </button>
+            <button class="btn sketch-card__icon sketch-card__icon--danger" data-action="delete" data-id="${id}"
+                    title="${escapeHtml(t('listDelete'))}" aria-label="${escapeHtml(t('listDelete'))}">
+              <span class="material-icons" aria-hidden="true">delete_outline</span>
+            </button>
+          </span>
+        </div>
+        <div class="sketch-card__meta">
+          <span class="sketch-card__status" data-slot="status"></span>
+          <span>${escapeHtml(t('listCounts', (rec.nodes || []).length, (rec.edges || []).length))}</span>
+          <span>${escapeHtml(t('listUpdated', when(rec.updatedAt || rec.createdAt)))}</span>
+        </div>
+        <div class="sketch-card__tags" data-slot="tags"></div>
+        <div class="sketch-card__actions">
+          <button class="btn sketch-card__open" data-action="open" data-id="${id}">
+            <span class="material-icons" aria-hidden="true">edit</span>
+            <span>${escapeHtml(t('listOpen'))}</span>
+          </button>
+          <span class="sketch-card__send" data-slot="send"></span>
+        </div>
+        <div class="sketch-card__extra" data-slot="extra"></div>
+      </div>`;
+    sketchListEl.appendChild(card);
+  });
 }
 
 function hideHome() {
@@ -1660,6 +1795,7 @@ function newSketch(date) {
   currentSketchId = null; // new unsaved sketch
   schemaVersion = SCHEMA_VERSION;
   currentSketchName = null;
+  updateBoardTitle();
   saveToStorage();
   draw();
   renderDetails();
@@ -3822,7 +3958,13 @@ if (importSketchBtn && importSketchFile) {
       nextNodeId = importedSketch.nextNodeId;
       creationDate = importedSketch.creationDate;
       currentSketchId = null; // Will get new ID when saved
-      currentSketchName = importedSketch.sketchName;
+      // Name the sketch after the file it came from, not whatever name was
+      // embedded in the JSON — the file on disk is what the surveyor can see.
+      const importedFileName = String(file.name || '')
+        .replace(/\.[^.]+$/, '')
+        .trim();
+      currentSketchName = importedFileName || importedSketch.sketchName || null;
+      updateBoardTitle();
 
       // Recover option values truncated by the old unescaped drawer markup
       repairTruncatedOptionValues(nodes, edges, adminConfig);
@@ -3887,18 +4029,35 @@ if (sketchListEl) {
       input.select();
       const commit = () => {
         const newVal = input.value.trim();
+        let name;
         if (newVal.length === 0) {
-          rec.name = null;
+          name = null;
         } else if (!hadExplicitName && newVal === originalTitle) {
           // User didn't change the fallback title; keep name as null
-          rec.name = null;
+          name = null;
         } else {
-          rec.name = newVal;
+          name = newVal;
         }
-        rec.updatedAt = new Date().toISOString();
-        setLibrary(lib);
-        if (currentSketchId === rec.id) {
-          currentSketchName = rec.name || null;
+        // Read the library afresh: sync may have changed it while the field was
+        // open, and writing back the copy read when it opened would undo that.
+        const fresh = getLibrary();
+        const at = fresh.findIndex((r) => r.id === id);
+        if (at < 0) {
+          renderHome();
+          return;
+        }
+        // A rename is an edit: it gets a new version, so it reaches this
+        // sketch on other devices (see withSyncMeta).
+        const renamed = withSyncMeta(fresh[at], { ...fresh[at], name, updatedAt: new Date().toISOString() });
+        fresh[at] = renamed;
+        setLibrary(fresh);
+        idbSaveRecordCompat(renamed);
+        try {
+          window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id } }));
+        } catch (_) {}
+        if (currentSketchId === id) {
+          currentSketchName = name || null;
+          updateBoardTitle();
           saveToStorage();
         }
         renderHome();
@@ -3914,8 +4073,12 @@ if (sketchListEl) {
       input.addEventListener('blur', commit);
       return;
     }
-    const action = target.getAttribute('data-action');
-    const id = target.getAttribute('data-id');
+    // closest(): the buttons carry an icon, and a tap on the icon lands on the
+    // icon, not the button that holds the data attributes.
+    const actionEl = target.closest('[data-action][data-id]');
+    if (!actionEl || !sketchListEl.contains(actionEl)) return;
+    const action = actionEl.getAttribute('data-action');
+    const id = actionEl.getAttribute('data-id');
     if (!action || !id) return;
     if (action === 'open') {
       hideHome();
@@ -3925,9 +4088,21 @@ if (sketchListEl) {
       const lib = getLibrary();
       const rec = lib.find((r) => r.id === id);
       if (rec) {
-        const copy = { ...rec, id: generateSketchId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const nowIso = new Date().toISOString();
+        const copy = { ...rec, id: generateSketchId(), createdAt: nowIso, updatedAt: nowIso };
+        // A copy is a new sketch: it must not inherit the original's sync
+        // marks, or the sync layer would take it for one already in the cloud
+        // and never send it.
+        const rev = newRev();
+        copy.rev = rev;
+        copy.revs = [rev];
+        delete copy.syncedRev;
+        delete copy.ownerUid;
         lib.unshift(copy);
         setLibrary(lib);
+        try {
+          window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: copy.id } }));
+        } catch (_) {}
         renderHome();
         showToast(t('toasts.duplicated'));
       }
@@ -3941,8 +4116,14 @@ if (sketchListEl) {
   });
 }
 
-// Save button. Saving happens on every change anyway; this stays because a
-// surveyor finishing a manhole wants to see something say so.
+// Save button.
+//
+// Every edit already persists on its own (debouncedSaveToStorage), so this
+// button is not what keeps data safe — it is a receipt. A surveyor who has just
+// finished a manhole in the rain wants a visible "נשמר" before pocketing the
+// phone, and autosave is silent by design. It also forces an immediate write
+// rather than waiting out the debounce, which is why the cloud layer clicks it
+// before sending: it is the one path that assigns an id to a new sketch.
 if (saveBtn) {
   saveBtn.addEventListener('click', () => {
     saveToStorage();
@@ -4445,7 +4626,6 @@ function searchAndCenterNode(searchId) {
 
 // Search input handlers
 const searchNodeInput = document.getElementById('searchNodeInput');
-const mobileSearchNodeInput = document.getElementById('mobileSearchNodeInput');
 
 if (searchNodeInput) {
   searchNodeInput.addEventListener('keydown', (e) => {
@@ -4468,26 +4648,82 @@ if (searchNodeInput) {
   });
 }
 
-if (mobileSearchNodeInput) {
-  mobileSearchNodeInput.addEventListener('keydown', (e) => {
+
+
+// Full-screen home: a close button (the panel now covers the canvas, so there
+// has to be a way out) and an import entry, because importing a sketch from a
+// file is something a surveyor does *from* the sketch list, not from a menu
+// three taps away.
+const homeCloseBtn = document.getElementById('homeCloseBtn');
+const homeImportBtn = document.getElementById('homeImportBtn');
+
+if (homeCloseBtn && homePanel) {
+  homeCloseBtn.addEventListener('click', () => {
+    homePanel.style.display = 'none';
+  });
+}
+if (homeImportBtn && importSketchBtn) {
+  homeImportBtn.addEventListener('click', () => {
+    importSketchBtn.click();
+  });
+}
+
+// Phone: a manhole search reachable straight from the header.
+//
+// Finding a manhole by number is the single most common thing a surveyor does,
+// and it used to mean opening the overflow menu and scrolling to the field
+// buried in it. This is the same search, one tap away. Behaviour matches the
+// two inputs above deliberately  Enter searches and drops the keyboard, and
+// typing searches 500ms after you stop.
+const mobileSearchBtn = document.getElementById('mobileSearchBtn');
+const mobileSearchBar = document.getElementById('mobileSearchBar');
+const mobileSearchBarInput = document.getElementById('mobileSearchBarInput');
+const mobileSearchCloseBtn = document.getElementById('mobileSearchCloseBtn');
+
+function setMobileSearchOpen(open) {
+  if (!mobileSearchBar) return;
+  mobileSearchBar.style.display = open ? 'flex' : 'none';
+  if (!mobileSearchBarInput) return;
+  if (open) {
+    // Both overlay the same corner of the screen; never show them at once.
+    closeMobileMenu();
+    mobileSearchBarInput.focus();
+    mobileSearchBarInput.select();
+  } else {
+    mobileSearchBarInput.blur();
+  }
+}
+
+if (mobileSearchBtn) {
+  mobileSearchBtn.addEventListener('click', () => {
+    setMobileSearchOpen(!mobileSearchBar || mobileSearchBar.style.display === 'none');
+  });
+}
+if (mobileSearchCloseBtn) {
+  mobileSearchCloseBtn.addEventListener('click', () => setMobileSearchOpen(false));
+}
+if (mobileSearchBarInput) {
+  mobileSearchBarInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      searchAndCenterNode(mobileSearchNodeInput.value);
-      mobileSearchNodeInput.blur(); // Close mobile keyboard
+      searchAndCenterNode(mobileSearchBarInput.value);
+      mobileSearchBarInput.blur(); // Close mobile keyboard
+    } else if (e.key === 'Escape') {
+      setMobileSearchOpen(false);
     }
   });
-  
-  // Also trigger search on input change (debounced)
-  let mobileSearchTimeout;
-  mobileSearchNodeInput.addEventListener('input', (e) => {
-    clearTimeout(mobileSearchTimeout);
-    mobileSearchTimeout = setTimeout(() => {
-      if (mobileSearchNodeInput.value.trim()) {
-        searchAndCenterNode(mobileSearchNodeInput.value);
+
+  let mobileBarSearchTimeout;
+  mobileSearchBarInput.addEventListener('input', () => {
+    clearTimeout(mobileBarSearchTimeout);
+    mobileBarSearchTimeout = setTimeout(() => {
+      if (mobileSearchBarInput.value.trim()) {
+        searchAndCenterNode(mobileSearchBarInput.value);
       }
     }, 500); // Wait 500ms after user stops typing
   });
 }
+
 
 /**
  * Application entry point: set defaults, load persisted state, size canvas and render UI.
@@ -4508,7 +4744,7 @@ async function init() {
   const hasLib = getLibrary().length > 0;
   if (hasLib) {
     renderHome();
-  } else if (loadFromStorage()) {
+  } else if (!startupSketchWasDeleted && loadFromStorage()) {
     startPanel.style.display = 'none';
     hideHome();
   } else {
@@ -4520,11 +4756,21 @@ async function init() {
     const rec = lib.find((r) => r.id === currentSketchId);
     if (rec && rec.name) currentSketchName = rec.name;
   }
+  updateBoardTitle();
   // Default interaction mode is node creation
   setMode('node');
   updateOrientationControls();
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
+  // With a library, startup shows the list and never draws graphSketch — but
+  // the last sketch stays current (currentSketchId), and the canvas was left
+  // empty. Anything that saved from there wrote an empty drawing over that
+  // sketch: Save, Send (which presses Save), or renaming it in the list. With
+  // sync, that empty drawing then replaced the sketch on every device. So the
+  // canvas behind the list holds the current sketch, as the library has it.
+  if (hasLib && currentSketchId && getLibrary().some((r) => r.id === currentSketchId)) {
+    loadFromLibrary(currentSketchId);
+  }
   renderDetails();
 }
 

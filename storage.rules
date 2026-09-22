@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Attachment bytes. Paths mirror Firestore exactly — users/{uid}/sketches/... —
+// so the same ownership rule covers both: the member who captured the sketch
+// writes, the member and any admin read.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Storage rules cannot read Firestore, so admin status is carried on the
+    // auth token. scripts/seed-admin.mjs sets this custom claim on the admin.
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/sketches/{sketchId}/{fileName} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // 25 MB ceiling, images and PDFs only — matched to attachments.js so a
+      // client-side bypass gains nothing.
+      allow create, update: if isOwner(uid)
+        && request.resource.size < 25 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+
+      allow delete: if isOwner(uid);
+    }
+
+    // Everything else is denied.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
