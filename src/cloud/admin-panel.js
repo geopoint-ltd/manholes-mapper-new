@@ -28,7 +28,14 @@ import {
   setTrelloCard,
   OFFICE_FLAGS,
 } from '../firebase/tags.js';
-import { startTrello, stopTrello, renderTrello, isTrelloReady, sendSketchToTrello } from './trello-panel.js';
+import {
+  startTrello,
+  stopTrello,
+  renderTrello,
+  isTrelloReady,
+  sendSketchToTrello,
+  chooseTrelloDestination,
+} from './trello-panel.js';
 import { tagRow, tagChip, swatches, wireSwatches, openTagPicker, closeTagPicker } from './tag-picker.js';
 
 let el = null;
@@ -375,6 +382,43 @@ function trelloButton(office, path) {
     </button>`;
 }
 
+/**
+ * Create the card in the chosen board and list.
+ *
+ * The button becomes the "Open in Trello" link as soon as the card exists; the
+ * ZIP upload and the database confirming the record happen after, and neither
+ * may hold the button.
+ */
+function createTrelloCard(trelloBtn, target, destination) {
+  const label = trelloBtn.querySelector('span:last-child');
+  const before = label ? label.textContent : '';
+  trelloBtn.disabled = true;
+  if (label) label.textContent = t('cloud.sendingToTrello');
+  let created = false;
+  sendSketchToTrello(target, panelTags, formatWhen(target.submittedAt), {
+    target: destination,
+    onCardCreated: (card) => {
+      created = true;
+      trelloBtn.outerHTML = trelloButton({ trelloCardUrl: card.url }, escapeHtml(target.path));
+      // Firestore queues the write and retries it; if it is refused outright,
+      // say so, because then the app would offer to create the card again.
+      setTrelloCard(target.ownerUid, target.id, card).catch((err) => {
+        toast(`${t('cloud.trelloNotRecorded')}: ${(err && err.message) || err}`);
+      });
+    },
+  })
+    .then((card) => {
+      toast(card.attachFailed ? t('cloud.trelloAttachFailed') : t('cloud.trelloAdded'));
+    })
+    .catch((err) => {
+      if (!created) {
+        trelloBtn.disabled = false;
+        if (label) label.textContent = before;
+      }
+      toast((err && err.message) || String(err));
+    });
+}
+
 /** Switch the panel to a tab, as if its button were clicked. */
 function showTab(name) {
   const tab = el && el.querySelector(`.cloud-tab[data-tab="${name}"]`);
@@ -682,35 +726,9 @@ function wire() {
         showTab('trello');
         return;
       }
-      const label = trelloBtn.querySelector('span:last-child');
-      const before = label ? label.textContent : '';
-      trelloBtn.disabled = true;
-      if (label) label.textContent = t('cloud.sendingToTrello');
-      let created = false;
-      sendSketchToTrello(target, panelTags, formatWhen(target.submittedAt), {
-        onCardCreated: (card) => {
-          created = true;
-          // The card exists: show it now, as the link it will be from here on.
-          // Neither the ZIP upload nor the database confirming the record gets
-          // to hold the button — the live inbox repaints the same link anyway.
-          trelloBtn.outerHTML = trelloButton({ trelloCardUrl: card.url }, escapeHtml(target.path));
-          // Firestore queues the write and retries it; if it is refused outright,
-          // say so, because then the app will offer to create the card again.
-          setTrelloCard(target.ownerUid, target.id, card).catch((err) => {
-            toast(`${t('cloud.trelloNotRecorded')}: ${(err && err.message) || err}`);
-          });
-        },
-      })
-        .then((card) => {
-          toast(card.attachFailed ? t('cloud.trelloAttachFailed') : t('cloud.trelloAdded'));
-        })
-        .catch((err) => {
-          if (!created) {
-            trelloBtn.disabled = false;
-            if (label) label.textContent = before;
-          }
-          toast((err && err.message) || String(err));
-        });
+      chooseTrelloDestination(target).then((destination) => {
+        if (destination) createTrelloCard(trelloBtn, target, destination);
+      });
       return;
     }
     const delBtn = event.target.closest('button[data-act="delete"]');

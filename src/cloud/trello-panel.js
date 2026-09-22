@@ -37,6 +37,10 @@ let boards = null;
 let lists = null;
 let pickedBoard = null;
 let loading = false;
+/** boardId -> its lists, so switching back and forth in the picker is instant. */
+const listCache = new Map();
+/** Where this admin last sent a card. Per browser: it is a personal habit. */
+const LAST_TARGET_KEY = 'trello.lastTarget';
 
 /** Start following the office's Trello settings. Called when the panel opens. */
 export function startTrello() {
@@ -61,9 +65,12 @@ export function stopTrello() {
   host = null;
 }
 
-/** Whether a card can be created right now, from this browser. */
+/**
+ * Whether a card can be created right now, from this browser. The office
+ * default destination is optional — each card picks its own board and list.
+ */
 export function isTrelloReady() {
-  return Boolean(settings.apiKey && settings.boardId && settings.listId && getToken());
+  return Boolean(settings.apiKey && getToken());
 }
 
 /** Draw the tab into this container. */
@@ -162,6 +169,7 @@ function render() {
       </li>
       <li class="trello-step ${stepState(Boolean(settings.listId), Boolean(token))}">
         <div class="trello-step__head"><span class="trello-step__num">3</span>${escapeHtml(t('cloud.trelloStepTarget'))}</div>
+        <p class="trello-step__help">${escapeHtml(t('cloud.trelloTargetHelp'))}</p>
         ${target}
       </li>
     </ol>
@@ -244,6 +252,7 @@ function wire() {
       me = null;
       boards = null;
       lists = null;
+      listCache.clear();
       pickedBoard = null;
       render();
     });
@@ -335,6 +344,8 @@ export async function sendSketchToTrello(sketch, tagCatalog, when, hooks = {}) {
   const key = settings.apiKey;
   const token = getToken();
   if (!isTrelloReady()) throw new Error('trello-not-ready');
+  const destination = hooks.target || { boardId: settings.boardId, listId: settings.listId };
+  if (!destination.boardId || !destination.listId) throw new Error('trello-no-destination');
   const byId = new Map((tagCatalog || []).map((tag) => [tag.id, tag]));
   const tags = (sketch.tags || []).map((id) => byId.get(id)).filter(Boolean);
   const adminConfig = typeof window.getAdminConfig === 'function' ? window.getAdminConfig() : null;
@@ -345,8 +356,8 @@ export async function sendSketchToTrello(sketch, tagCatalog, when, hooks = {}) {
     card = await createCard({
       key,
       token,
-      boardId: settings.boardId,
-      listId: settings.listId,
+      boardId: destination.boardId,
+      listId: destination.listId,
       // Several sketches share a date; the worker's name tells their cards apart.
       name: owner ? `${sketchDisplayName(sketch)} · ${owner}` : sketchDisplayName(sketch),
       desc: describe(sketch, tags, when),
@@ -370,4 +381,169 @@ export async function sendSketchToTrello(sketch, tagCatalog, when, hooks = {}) {
     ? await attachFile({ key, token, cardId: card.id, blob: zip.blob, filename: zip.filename })
     : true;
   return { ...card, attachFailed: !attached };
+}
+
+/* ---------------- choosing where each card goes ---------------- */
+
+function readLastTarget() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_TARGET_KEY) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+function rememberTarget(target) {
+  try {
+    localStorage.setItem(LAST_TARGET_KEY, JSON.stringify(target));
+  } catch (_) {}
+}
+
+async function boardsForPicker() {
+  if (!boards) boards = await listBoards(settings.apiKey, getToken());
+  return boards;
+}
+
+async function listsForPicker(boardId) {
+  if (!listCache.has(boardId)) listCache.set(boardId, await listLists(settings.apiKey, getToken(), boardId));
+  return listCache.get(boardId);
+}
+
+/**
+ * Ask which board and list this card goes to.
+ *
+ * Pre-selected with where this admin sent the last card — most cards go where
+ * the last one went, so that is one click — or, the first time, the office
+ * default from the Trello tab.
+ *
+ * @returns {Promise<{boardId: string, boardName: string, listId: string, listName: string} | null>}
+ *   null when cancelled.
+ */
+export function chooseTrelloDestination(sketch) {
+  return new Promise((resolve) => {
+    const last = readLastTarget();
+    const start = last && last.boardId
+      ? last
+      : { boardId: settings.boardId || '', listId: settings.listId || '' };
+    const owner = String(sketch.ownerEmail || '').split('@')[0];
+    const cardName = owner ? `${sketchDisplayName(sketch)} · ${owner}` : sketchDisplayName(sketch);
+
+    const root = document.createElement('div');
+    root.className = 'tag-picker trello-picker';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-labelledby', 'trelloPickTitle');
+    root.innerHTML = `
+      <div class="tag-picker__card">
+        <div class="tag-picker__head">
+          <h3 id="trelloPickTitle">${escapeHtml(t('cloud.trelloChooseTitle'))}</h3>
+          <button type="button" class="tag-picker__close" data-close aria-label="${escapeHtml(t('close'))}">
+            <span class="material-icons" aria-hidden="true">close</span>
+          </button>
+        </div>
+        <p class="trello-picker__card-name">
+          <span class="material-icons" aria-hidden="true">view_week</span>
+          <span dir="auto">${escapeHtml(cardName)}</span>
+        </p>
+        <div class="tag-picker__error" role="alert" hidden></div>
+        <label class="cloud-field trello-select">
+          <span>${escapeHtml(t('cloud.trelloBoard'))}</span>
+          <select data-pick="board" disabled>${option('', t('cloud.loading'), true)}</select>
+        </label>
+        <label class="cloud-field trello-select">
+          <span>${escapeHtml(t('cloud.trelloList'))}</span>
+          <select data-pick="list" disabled>${option('', t('cloud.loading'), true)}</select>
+        </label>
+        <div class="trello-picker__actions">
+          <button type="button" class="btn btn-primary trello-btn" data-go disabled>
+            <span class="material-icons" aria-hidden="true">add</span>
+            <span>${escapeHtml(t('cloud.trelloCreateCard'))}</span>
+          </button>
+          <button type="button" class="btn trello-btn" data-close>${escapeHtml(t('cancel'))}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(root);
+
+    const boardSel = root.querySelector('[data-pick="board"]');
+    const listSel = root.querySelector('[data-pick="list"]');
+    const go = root.querySelector('[data-go]');
+    const errorBox = root.querySelector('.tag-picker__error');
+    const showError = (err) => {
+      if (err && err.code === 401) {
+        forgetToken();
+        me = null;
+        render();
+        errorBox.textContent = t('cloud.trelloAuthExpired');
+      } else {
+        errorBox.textContent = (err && err.message) || String(err);
+      }
+      errorBox.hidden = false;
+    };
+
+    function onKey(event) {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        finish(null);
+      }
+    }
+    function finish(value) {
+      document.removeEventListener('keydown', onKey, true);
+      root.remove();
+      resolve(value);
+    }
+    document.addEventListener('keydown', onKey, true);
+    root.addEventListener('click', (event) => {
+      if (event.target === root || event.target.closest('[data-close]')) finish(null);
+    });
+
+    async function fillLists(boardId, preferListId) {
+      listSel.disabled = true;
+      go.disabled = true;
+      listSel.innerHTML = option('', t('cloud.loading'), true);
+      try {
+        const found = await listsForPicker(boardId);
+        if (!found.length) {
+          listSel.innerHTML = option('', t('cloud.trelloNoLists'), true);
+          return;
+        }
+        const pick = found.some((l) => l.id === preferListId) ? preferListId : found[0].id;
+        listSel.innerHTML = found.map((l) => option(l.id, l.name, l.id === pick)).join('');
+        listSel.disabled = false;
+        go.disabled = false;
+      } catch (err) {
+        showError(err);
+      }
+    }
+
+    (async () => {
+      try {
+        const found = await boardsForPicker();
+        if (!found.length) {
+          boardSel.innerHTML = option('', t('cloud.trelloNoBoards'), true);
+          return;
+        }
+        const boardId = found.some((b) => b.id === start.boardId) ? start.boardId : found[0].id;
+        boardSel.innerHTML = found.map((b) => option(b.id, b.name, b.id === boardId)).join('');
+        boardSel.disabled = false;
+        await fillLists(boardId, start.listId);
+        go.focus();
+      } catch (err) {
+        showError(err);
+      }
+    })();
+
+    boardSel.addEventListener('change', () => fillLists(boardSel.value, null));
+    go.addEventListener('click', () => {
+      if (!boardSel.value || !listSel.value) return;
+      const target = {
+        boardId: boardSel.value,
+        boardName: boardSel.options[boardSel.selectedIndex].textContent,
+        listId: listSel.value,
+        listName: listSel.options[listSel.selectedIndex].textContent,
+      };
+      rememberTarget(target);
+      finish(target);
+    });
+  });
 }

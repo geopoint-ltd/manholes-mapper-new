@@ -1525,3 +1525,28 @@
   .inbox-btn--trello:hover { color: #85b8ff; }
   .trello-target { color: #86efac; }
 }
+
+/* ---------------- choosing where a card goes ---------------- */
+
+.trello-picker .trello-select { display: block; margin: 0 0 0.75rem; }
+.trello-picker__card-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: var(--color-bg);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.trello-picker__card-name .material-icons { font-size: 18px; color: #0c66e4; }
+.trello-picker__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.trello-picker__actions .btn-primary { flex: 1 1 auto; }
+@media (prefers-color-scheme: dark) {
+  .trello-picker__card-name .material-icons { color: #85b8ff; }
+}
