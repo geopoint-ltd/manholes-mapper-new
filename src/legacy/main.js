@@ -1240,14 +1240,51 @@ const debouncedSaveToStorage = (function () {
   /** @type {number|undefined} */
   let timeoutId;
   const delayMs = 150;
-  return function () {
+  const schedule = function () {
     if (timeoutId) clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       timeoutId = undefined;
       try { saveToStorage(); } catch (_) {}
     }, delayMs);
   };
+  /** Run a save that is still waiting out the delay, now. No-op otherwise. */
+  schedule.flush = function () {
+    if (!timeoutId) return;
+    clearTimeout(timeoutId);
+    timeoutId = undefined;
+    try { saveToStorage(); } catch (_) {}
+  };
+  return schedule;
 })();
+
+// Leaving the app — switching to WhatsApp or the camera, locking the phone — is
+// when a mobile browser may freeze this page, or discard it, without warning.
+// Most edits are already saved by then, but not all: the manhole number and a
+// sketch's name commit only when their field is left, and an edit can still be
+// inside the autosave delay above. Finish all of it before the page goes.
+//
+// Only the fields that commit on leaving are touched; everything else saves as
+// it is typed.
+function saveBeforeLeaving() {
+  try {
+    commitIdInputIfFocused();
+  } catch (_) {}
+  try {
+    const active = document.activeElement;
+    // The home list's rename field commits on blur or Enter. Send the Enter:
+    // a page on its way to the background often has no focus to lose, so
+    // blur() there fires nothing and the new name would never be saved.
+    if (active && active.tagName === 'INPUT' && active.closest && active.closest('#sketchList')) {
+      active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    }
+  } catch (_) {}
+  debouncedSaveToStorage.flush();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveBeforeLeaving();
+});
+// Some browsers skip visibilitychange when a page is closed outright.
+window.addEventListener('pagehide', saveBeforeLeaving);
 
 /**
  * Remove the stored sketch from localStorage.

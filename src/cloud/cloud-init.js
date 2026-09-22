@@ -696,20 +696,47 @@ function markArrivalsSeen() {
 /* ---------------- sync ---------------- */
 
 let syncTimer = null;
+let pendingSyncId = null;
+
+async function syncNow(sketchId) {
+  const record = findRecord(sketchId);
+  if (!record) return;
+  try {
+    await saveSketch(record);
+  } catch (err) {
+    // Offline writes are queued by Firestore itself; anything else is worth
+    // knowing about but must not interrupt the survey.
+    console.warn('cloud sync failed', err && err.message);
+  }
+}
+
 function scheduleSync(sketchId) {
   if (!getProfile()) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(async () => {
-    const record = findRecord(sketchId);
-    if (!record) return;
-    try {
-      await saveSketch(record);
-    } catch (err) {
-      // Offline writes are queued by Firestore itself; anything else is worth
-      // knowing about but must not interrupt the survey.
-      console.warn('cloud sync failed', err && err.message);
-    }
+  pendingSyncId = sketchId;
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    pendingSyncId = null;
+    syncNow(sketchId);
   }, 1500);
+}
+
+/**
+ * Send a waiting cloud update now, rather than after its delay.
+ *
+ * Called when the app is left. The delay is only there to batch rapid edits;
+ * once the surveyor has switched away there is nothing left to batch, and a
+ * frozen page never fires the timer. Firestore puts the write in its on-device
+ * queue straight away, so even if the page is then discarded, the update goes
+ * to the office the next time the app opens.
+ */
+function flushSync() {
+  if (!pendingSyncId) return;
+  clearTimeout(syncTimer);
+  const id = pendingSyncId;
+  syncTimer = null;
+  pendingSyncId = null;
+  syncNow(id);
 }
 
 async function loadCloudStatuses() {
@@ -758,6 +785,13 @@ export function initCloud() {
       showLogin();
     }
   });
+
+  // Registered after main.js's own handler, which runs first and may itself
+  // save — so the update it triggers is the one sent here.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSync();
+  });
+  window.addEventListener('pagehide', flushSync);
 
   // main.js announces every library write; mirror it to the cloud, debounced.
   window.addEventListener('sketch:saved', (event) => {
