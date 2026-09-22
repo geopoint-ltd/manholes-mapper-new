@@ -12,6 +12,7 @@
 import { SKETCH_STATUS } from './config.js';
 import { getDb } from './app.js';
 import { getProfile, isAdmin } from './auth.js';
+import { revOf, revsOf } from '../cloud/sync-plan.js';
 
 function requireProfile() {
   const profile = getProfile();
@@ -29,9 +30,20 @@ function toCloudSketch(record) {
     nextNodeId: Number(record.nextNodeId) || 1,
     creationDate: record.creationDate || record.createdAt || null,
     createdAt: record.createdAt || null,
-    updatedAt: record.updatedAt || new Date().toISOString(),
+    updatedAt: record.updatedAt || record.createdAt || null,
     nodeCount: Array.isArray(record.nodes) ? record.nodes.length : 0,
     edgeCount: Array.isArray(record.edges) ? record.edges.length : 0,
+    // Without it, a sketch pulled onto another device would be run through
+    // data migrations meant for sketches from older versions of the app.
+    schemaVersion: Number(record.schemaVersion) || null,
+    // Cross-device sync: which version this is, and what it grew from.
+    // A sketch saved before versions existed gets the same stand-in version
+    // on both sides, so the two copies are recognised as one.
+    rev: revOf(record),
+    revs: revsOf(record),
+    // A send always means "this sketch exists": it undoes a delete made on
+    // another device, when this one still had unsent work in it.
+    deleted: false,
   };
 }
 
@@ -76,6 +88,46 @@ export async function saveSketches(records) {
     }
   }
   return { saved, failed };
+}
+
+/**
+ * Keep this account's sketches live, for cross-device sync and for the "sent"
+ * marks. Every sketch, whatever its status, including deleted ones — a delete
+ * is a flag, so other devices can see it happened.
+ * @param {(sketches: object[]) => void} onChange
+ * @returns {Promise<() => void>} unsubscribe
+ */
+export async function watchMySketches(onChange, onError) {
+  const profile = requireProfile();
+  const db = await getDb();
+  const { collection, onSnapshot } = await import('firebase/firestore');
+  return onSnapshot(
+    collection(db, 'users', profile.uid, 'sketches'),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      if (typeof onError === 'function') onError(err);
+      else console.warn('sketch watch failed', err && err.message);
+    }
+  );
+}
+
+/**
+ * Mark one of your sketches deleted, so your other devices drop it too.
+ *
+ * A flag rather than a delete, for two reasons: other devices must be able to
+ * tell "deleted by its owner" from "removed by the office" (which never touches
+ * a worker's device), and the drawing stays in place, so nothing is beyond
+ * recovery. A copy already sent to the office stays in the office's inbox.
+ */
+export async function markSketchDeleted(sketchId, { rev, revs }) {
+  const profile = requireProfile();
+  const db = await getDb();
+  const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+  await setDoc(
+    doc(db, 'users', profile.uid, 'sketches', String(sketchId)),
+    { deleted: true, deletedAt: serverTimestamp(), rev, revs, updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
 }
 
 /** The signed-in member's own sketches. */

@@ -3,15 +3,18 @@
 // Two rules shape everything here:
 //   1. With no Firebase config, this module does nothing at all. The app stays
 //      exactly the offline tool it is today — no login wall, no new buttons.
-//   2. The local sketch library remains the source of truth while working. The
-//      cloud is a mirror. A failed sync must never cost a surveyor their data,
-//      so nothing here deletes or rewrites local state.
+//   2. The local sketch library remains the source of truth while working. A
+//      failed sync must never cost a surveyor their data. Sync between devices
+//      (below) only ever adds versions; it takes a sketch off this device only
+//      when its owner deleted it on another one and nothing here is unsent.
 
 import './cloud-ui.css';
 import { isFirebaseConfigured, isStorageConfigured, SKETCH_STATUS } from '../firebase/config.js';
 import { escapeHtml } from '../dom/dom-utils.js';
 import { startAuthWatch, onProfileChanged, getProfile, isAdmin, signOut } from '../firebase/auth.js';
-import { saveSketch, submitSketch, listMySketches } from '../firebase/sketches.js';
+import { saveSketch, submitSketch, watchMySketches, markSketchDeleted } from '../firebase/sketches.js';
+import { planSync, revOf, revsOf, isDirty } from './sync-plan.js';
+import { SCHEMA_VERSION } from '../utils/schema-migration.js';
 import { uploadAttachment, listAttachments, formatSize } from '../firebase/attachments.js';
 import { showLogin, hideLogin } from './login-screen.js';
 import { watchTags, createTag, addSketchTag, removeSketchTag } from '../firebase/tags.js';
@@ -693,66 +696,253 @@ function markArrivalsSeen() {
   renderMenuActions(profile);
 }
 
-/* ---------------- sync ---------------- */
+/* ---------------- sync between devices ---------------- */
 
+// Every device signed in to one account holds the same sketches. The account's
+// sketches in the cloud are watched live; whenever they or this device's
+// library change, a sync pass compares the two and brings them together — new
+// and newer versions come down, this device's changes go up, deletes follow,
+// and a sketch changed on two devices separately is kept in both versions. The
+// rules are in sync-plan.js, which decides; this part only carries them out.
+
+/** sketchId -> this account's cloud document, as last seen. */
+const cloudDocs = new Map();
+/** The first snapshot has arrived, so a missing document means something. */
+let cloudReady = false;
+let sketchesUnsub = null;
 let syncTimer = null;
-let pendingSyncId = null;
+/** Saved before the cloud could be compared with; sent as-is if the app is left. */
+const savedEarly = new Set();
+/** sketchId -> {rev, failed}: a version on its way, or refused, is sent once. */
+const pushes = new Map();
+/** Deleted on this device, the cloud not yet told; never brought back meanwhile. */
+const deletedHere = new Set();
+/** Open-sketch conflicts already reported, so the toast does not repeat. */
+const reportedConflicts = new Set();
 
-async function syncNow(sketchId) {
-  const record = findRecord(sketchId);
-  if (!record) return;
-  try {
-    await saveSketch(record);
-  } catch (err) {
-    // Offline writes are queued by Firestore itself; anything else is worth
-    // knowing about but must not interrupt the survey.
-    console.warn('cloud sync failed', err && err.message);
-  }
+function makeRev() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function scheduleSync(sketchId) {
-  if (!getProfile()) return;
-  clearTimeout(syncTimer);
-  pendingSyncId = sketchId;
-  syncTimer = setTimeout(() => {
-    syncTimer = null;
-    pendingSyncId = null;
-    syncNow(sketchId);
-  }, 1500);
+function sketchLibrary() {
+  return window.sketchLibrary || null;
+}
+
+function isTyping() {
+  const el = document.activeElement;
+  if (!el) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+}
+
+function copyName(record) {
+  const lib = sketchLibrary();
+  const base = lib ? lib.title(record) : record.name || '';
+  const suffix = t('cloud.syncCopySuffix');
+  return base.endsWith(suffix) ? base : `${base} ${suffix}`;
+}
+
+function countMessage(key, n) {
+  return n === 1 ? t(`${key}One`) : String(t(key)).replace('{n}', String(n));
 }
 
 /**
- * Send a waiting cloud update now, rather than after its delay.
+ * Send one sketch to this account's cloud copy, once per version.
+ *
+ * Marks it in sync only when the write is confirmed, and only if it was not
+ * changed meanwhile. A write the server refuses is not retried in this
+ * session: refusals do not fix themselves, and every retry would come straight
+ * back as another refusal.
+ */
+async function pushRecord(id) {
+  const profile = getProfile();
+  const lib = sketchLibrary();
+  if (!profile || !lib) return;
+  const key = String(id);
+  const record = lib.list().find((r) => String(r.id) === key);
+  if (!record || (record.ownerUid && record.ownerUid !== profile.uid)) return;
+  const rev = revOf(record);
+  const known = pushes.get(key);
+  if (known && known.rev === rev) return;
+  pushes.set(key, { rev, failed: false });
+  try {
+    await saveSketch(record);
+    pushes.delete(key);
+    const now = lib.list().find((r) => String(r.id) === key);
+    const me = getProfile();
+    if (now && me && me.uid === profile.uid && revOf(now) === rev) {
+      lib.patch([{ id: now.id, fields: { rev, revs: revsOf(now), syncedRev: rev, ownerUid: profile.uid } }]);
+    }
+  } catch (err) {
+    // Offline is not an error: Firestore queues the write on the device and
+    // this simply waits. Getting here means the server said no.
+    pushes.set(key, { rev, failed: true });
+    console.warn('cloud sync failed', key, err && err.message);
+  }
+}
+
+function runSyncPass() {
+  const profile = getProfile();
+  const lib = sketchLibrary();
+  if (!profile || !lib) return;
+
+  if (!cloudReady) {
+    // Nothing to compare with yet. Send what was saved here, as it is; the
+    // full comparison runs as soon as the cloud answers.
+    for (const id of savedEarly) {
+      const record = lib.list().find((r) => String(r.id) === id);
+      if (record && isDirty(record)) pushRecord(id);
+    }
+    return;
+  }
+  savedEarly.clear();
+
+  // An edit still inside the autosave delay must be in the library before the
+  // library is compared — or a newer version could be taken over it.
+  lib.flush();
+  const openId = lib.openId();
+  const local = lib.list();
+  const had = new Set(local.map((r) => String(r.id)));
+  const plan = planSync({
+    local,
+    cloud: [...cloudDocs.values()].filter((d) => !deletedHere.has(String(d.id))),
+    me: profile.uid,
+    openId,
+    makeRev,
+    copyName,
+    currentSchema: SCHEMA_VERSION,
+  });
+
+  let put = plan.put;
+  let reloadOpen = plan.reloadOpen;
+  if (reloadOpen && isTyping()) {
+    // A newer version of the open sketch, while the surveyor is typing into
+    // it: take it once they stop, rather than replace the field under them.
+    put = put.filter((r) => String(r.id) !== String(openId));
+    reloadOpen = false;
+    scheduleSyncPass(4000);
+  }
+
+  if (put.length) lib.put(put);
+  if (plan.patch.length) lib.patch(plan.patch);
+  if (plan.remove.length) lib.remove(plan.remove);
+  if (reloadOpen) {
+    lib.reloadOpen();
+    toast(t('cloud.syncOpenUpdated'));
+  }
+  plan.push.forEach((id) => pushRecord(id));
+
+  const copies = new Set(plan.notices.map((n) => n.copyId).filter(Boolean));
+  const arrived = put.filter((r) => !had.has(String(r.id)) && !copies.has(String(r.id))).length;
+  if (arrived) toast(countMessage('cloud.syncArrived', arrived));
+  if (plan.remove.length) toast(countMessage('cloud.syncRemoved', plan.remove.length));
+  for (const notice of plan.notices) {
+    if (notice.type === 'conflict') {
+      toast(String(t('cloud.syncConflict')).replace('{name}', notice.name || ''));
+    } else if (notice.type === 'conflict-deferred' && !reportedConflicts.has(notice.id)) {
+      reportedConflicts.add(notice.id);
+      toast(t('cloud.syncConflictOpen'));
+    }
+  }
+}
+
+function scheduleSyncPass(delay) {
+  if (!getProfile()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    runSyncPass();
+  }, delay);
+}
+
+/**
+ * Run a waiting sync pass now, rather than after its delay.
  *
  * Called when the app is left. The delay is only there to batch rapid edits;
  * once the surveyor has switched away there is nothing left to batch, and a
- * frozen page never fires the timer. Firestore puts the write in its on-device
- * queue straight away, so even if the page is then discarded, the update goes
- * to the office the next time the app opens.
+ * frozen page never fires the timer. Firestore puts each write in its
+ * on-device queue straight away, so even if the page is then discarded, the
+ * update goes up the next time the app opens.
  */
 function flushSync() {
-  if (!pendingSyncId) return;
+  if (!syncTimer && !savedEarly.size) return;
   clearTimeout(syncTimer);
-  const id = pendingSyncId;
   syncTimer = null;
-  pendingSyncId = null;
-  syncNow(id);
+  runSyncPass();
 }
 
-async function loadCloudStatuses() {
+/** A sketch deleted here: tell the cloud, so this account's other devices follow. */
+function onSketchDeleted(detail) {
+  const profile = getProfile();
+  if (!profile || !detail || !detail.id) return;
+  const id = String(detail.id);
+  const record = detail.record || null;
+  savedEarly.delete(id);
+  pushes.delete(id);
+  // Another account's sketch on a shared device is not this account's to delete.
+  if (record && record.ownerUid && record.ownerUid !== profile.uid) return;
+  const doc = cloudDocs.get(id);
+  // Only a sketch the cloud has. One never sent has nothing to follow it.
+  const inCloud = cloudReady ? Boolean(doc && !doc.deleted) : Boolean(record && record.syncedRev);
+  if (!inCloud) return;
+  const source = record || doc;
+  deletedHere.add(id);
+  markSketchDeleted(id, { rev: revOf(source), revs: revsOf(source) }).catch((err) => {
+    console.warn('could not mark the sketch deleted', id, err && err.message);
+  });
+}
+
+async function startSketchWatch() {
+  const profile = getProfile();
+  if (!profile || sketchesUnsub) return;
+  const uid = profile.uid;
   try {
-    const remote = await listMySketches();
-    cloudStatus.clear();
-    sketchTags.clear();
-    remote.forEach((s) => {
-      cloudStatus.set(String(s.id), s.status || SKETCH_STATUS.DRAFT);
-      sketchTags.set(String(s.id), Array.isArray(s.tags) ? s.tags.map(String) : []);
+    const unsub = await watchMySketches((docs) => {
+      const current = getProfile();
+      if (!current || current.uid !== uid) return;
+      cloudDocs.clear();
+      cloudStatus.clear();
+      sketchTags.clear();
+      docs.forEach((d) => {
+        const id = String(d.id);
+        cloudDocs.set(id, d);
+        if (d.deleted) {
+          deletedHere.delete(id); // the cloud has it now
+          return;
+        }
+        cloudStatus.set(id, d.status || SKETCH_STATUS.DRAFT);
+        sketchTags.set(id, Array.isArray(d.tags) ? d.tags.map(String) : []);
+      });
+      const first = !cloudReady;
+      cloudReady = true;
+      decorateList();
+      renderSendState(true);
+      // The first answer is compared at once. Later ones mostly echo this
+      // device's own writes; a short wait lets a burst of them settle.
+      scheduleSyncPass(first ? 0 : 400);
     });
-    decorateList();
-    renderSendState(true);
+    const current = getProfile();
+    if (current && current.uid === uid && !sketchesUnsub) sketchesUnsub = unsub;
+    else unsub();
   } catch (err) {
-    console.warn('could not read cloud sketches', err && err.message);
+    console.warn('could not watch cloud sketches', err && err.message);
   }
+}
+
+function stopSketchWatch() {
+  if (sketchesUnsub) {
+    try {
+      sketchesUnsub();
+    } catch (_) {}
+  }
+  sketchesUnsub = null;
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  cloudReady = false;
+  cloudDocs.clear();
+  savedEarly.clear();
+  pushes.clear();
+  deletedHere.clear();
+  reportedConflicts.clear();
 }
 
 /* ---------------- entry ---------------- */
@@ -775,11 +965,12 @@ export function initCloud() {
     if (profile) {
       hideLogin();
       watchList();
-      loadCloudStatuses();
+      startSketchWatch();
       watchArrivals();
       watchTagCatalog();
     } else {
       cloudStatus.clear();
+      stopSketchWatch();
       stopArrivalWatch();
       stopTagCatalog();
       showLogin();
@@ -793,12 +984,14 @@ export function initCloud() {
   });
   window.addEventListener('pagehide', flushSync);
 
-  // main.js announces every library write; mirror it to the cloud, debounced.
+  // main.js announces every library write; sync it, debounced.
   window.addEventListener('sketch:saved', (event) => {
     const id = event && event.detail && event.detail.id;
     if (!id) return;
     lastSavedId = id;
-    scheduleSync(id);
+    if (!cloudReady) savedEarly.add(String(id));
+    scheduleSyncPass(1500);
     renderSendState(false);
   });
+  window.addEventListener('sketch:deleted', (event) => onSketchDeleted(event && event.detail));
 }

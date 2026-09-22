@@ -5,7 +5,8 @@
     "preview": "vite preview",
     "lint": "eslint --ext .js,.ts src",
     "lint:fix": "eslint --ext .js,.ts src --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:sync": "node scripts/test-sync-plan.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

@@ -36,6 +36,7 @@ import { isNumericId, generateHomeInternalId } from '../graph/id-utils.js';
 import { commitIdInputIfFocused, escapeHtml } from '../dom/dom-utils.js';
 import { repairTruncatedOptionValues, repairTruncatedAdminLabels } from '../utils/option-values.js';
 import { migrateGraph, SCHEMA_VERSION, takeRemovedEdgeTypeCount } from '../utils/schema-migration.js';
+import { sketchContentKey } from '../utils/stable-json.js';
 import { buildOptionsEditorModal, buildOptionsEditorScreen } from '../admin/helpers.js';
 import { drawHouse as primitivesDrawHouse, drawDirectConnectionBadge as primitivesDrawDirectConnectionBadge } from '../features/drawing-primitives.js';
 import * as sketchView from '../features/sketch-view.js';
@@ -1232,7 +1233,28 @@ function saveToStorage() {
   localStorage.setItem('graphSketch', JSON.stringify(payload));
   // Persist to IndexedDB for durability
   idbSaveCurrentCompat(payload);
-  saveToLibrary();
+  const saved = saveToLibrary();
+  markCurrentSaved(saved);
+}
+
+// Which library version `graphSketch` was last saved as, written only once the
+// library write has succeeded. Startup needs it to tell whether graphSketch is
+// ahead of the library (a library write that failed) or behind it: sync can
+// now bring a newer version of a sketch into the library, or remove it, while
+// graphSketch still holds the old drawing. See ensureCurrentSketchInLibrary().
+function markCurrentSaved(saved) {
+  try {
+    if (saved) localStorage.setItem('graphSketch.savedAs', JSON.stringify({ id: saved.id, rev: saved.rev || null }));
+  } catch (_) {}
+}
+
+function readCurrentMark() {
+  try {
+    const mark = JSON.parse(localStorage.getItem('graphSketch.savedAs') || 'null');
+    return mark && mark.id ? mark : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 // Debounced saver to reduce jank on mobile while typing
@@ -1309,6 +1331,52 @@ function getLibrary() {
   }
 }
 
+/**
+ * Version bookkeeping for cross-device sync (see src/cloud/sync-plan.js).
+ *
+ * A record gets a new `rev` only when its contents change. That matters more
+ * than it looks: opening a sketch re-saves it, and startup rewrites the open
+ * one, and if either counted as an edit, every device that received a version
+ * would "change" it and send it back — an endless round of updates between
+ * phones. So a save whose drawing and name are unchanged keeps the rev, the
+ * sync marks, and even the updatedAt that the sketch list shows.
+ *
+ * `revs` is the history the rev grew from; `syncedRev` and `ownerUid` are the
+ * sync layer's, carried across saves untouched.
+ */
+function newRev() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function withSyncMeta(existing, next) {
+  const changed = !existing || sketchContentKey(existing) !== sketchContentKey(next);
+  if (!changed) {
+    return {
+      ...next,
+      updatedAt: existing.updatedAt || next.updatedAt,
+      rev: existing.rev,
+      revs: existing.revs,
+      syncedRev: existing.syncedRev,
+      ownerUid: existing.ownerUid,
+    };
+  }
+  const rev = newRev();
+  // A record from before revs existed descends from a stand-in built from its
+  // updatedAt — the same stand-in the sync layer gives its cloud copy.
+  const base = existing
+    ? (Array.isArray(existing.revs) && existing.revs.length
+        ? existing.revs
+        : [existing.rev || `u:${existing.updatedAt || existing.createdAt || ''}`])
+    : [];
+  return {
+    ...next,
+    rev,
+    revs: [...base, rev].slice(-50),
+    syncedRev: existing ? existing.syncedRev : undefined,
+    ownerUid: existing ? existing.ownerUid : undefined,
+  };
+}
+
 function setLibrary(list) {
   localStorage.setItem('graphSketch.library', JSON.stringify(list));
 }
@@ -1332,6 +1400,7 @@ function saveToLibrary() {
     schemaVersion,
   };
   const idx = lib.findIndex((s) => s.id === record.id);
+  let saved;
   if (idx >= 0) {
     // Preserve existing name if current is null, so we don't accidentally clear it
     const existing = lib[idx];
@@ -1339,18 +1408,21 @@ function saveToLibrary() {
     if ((record.name == null || record.name === '') && (existing.name != null && existing.name !== '')) {
       merged.name = existing.name;
     }
-    lib[idx] = merged;
+    saved = withSyncMeta(existing, merged);
+    lib[idx] = saved;
   } else {
-    lib.unshift(record);
+    saved = withSyncMeta(null, record);
+    lib.unshift(saved);
   }
   setLibrary(lib);
   currentSketchId = record.id;
   // Mirror into IndexedDB
-  idbSaveRecordCompat(record);
+  idbSaveRecordCompat(saved);
   // Announce the write so optional layers (e.g. cloud sync) can mirror it.
   try {
     window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: record.id } }));
   } catch (_) {}
+  return saved;
 }
 
 function loadFromLibrary(sketchId) {
@@ -1416,14 +1488,26 @@ function loadFromLibrary(sketchId) {
 
 function deleteFromLibrary(sketchId) {
   const lib = getLibrary();
+  const deleted = lib.find((r) => r.id === sketchId) || null;
   const filtered = lib.filter((r) => r.id !== sketchId);
   setLibrary(filtered);
+  // Other devices should drop it too. The record goes with the event because
+  // it is no longer in the library to be looked up.
+  try {
+    window.dispatchEvent(new CustomEvent('sketch:deleted', { detail: { id: sketchId, record: deleted } }));
+  } catch (_) {}
   if (currentSketchId === sketchId) {
     currentSketchId = null;
   }
   // Remove from IndexedDB
   idbDeleteRecordCompat(sketchId);
 }
+
+// Set when graphSketch holds a sketch deleted since it was last saved, so
+// startup does not put it back on the canvas either: shown there as the current
+// sketch, the next edit would save it again, and sync would restore it on every
+// device. graphSketch itself is left alone; the next sketch overwrites it.
+let startupSketchWasDeleted = false;
 
 /**
  * Make sure the sketch in `graphSketch` also exists in the library, and is the
@@ -1452,6 +1536,26 @@ function ensureCurrentSketchInLibrary() {
     const id = parsed.sketchId || generateSketchId();
     const idx = lib.findIndex((r) => r && r.id === id);
     const existing = idx >= 0 ? lib[idx] : null;
+
+    // graphSketch is ahead of the library only when a library write failed
+    // after it. When its last save did reach the library, the mark says as
+    // what version, and a library that has moved on since was changed by sync
+    // (a newer version from another device) or had the sketch removed (deleted
+    // here, or on another device). Writing graphSketch back then would undo
+    // that — overwrite another device's newer work, or bring back a deleted
+    // sketch — so the library stands.
+    const mark = readCurrentMark();
+    if (mark && parsed.sketchId && mark.id === id) {
+      if (!existing) {
+        startupSketchWasDeleted = true;
+        return;
+      }
+      if ((existing.rev || null) !== mark.rev) {
+        currentSketchId = id;
+        return;
+      }
+    }
+
     const nowIso = new Date().toISOString();
     const record = {
       id,
@@ -1466,9 +1570,11 @@ function ensureCurrentSketchInLibrary() {
       schemaVersion: parsed.schemaVersion,
     };
     // Replace this one entry. Rewriting the whole array would delete every
-    // other sketch on the device.
-    if (idx >= 0) lib[idx] = record;
-    else lib.unshift(record);
+    // other sketch on the device. The sync marks carry over, and an unchanged
+    // drawing is not an edit — see withSyncMeta().
+    const saved = withSyncMeta(existing, record);
+    if (idx >= 0) lib[idx] = saved;
+    else lib.unshift(saved);
     setLibrary(lib);
     currentSketchId = id;
 
@@ -1480,7 +1586,7 @@ function ensureCurrentSketchInLibrary() {
       parsed.sketchId = id;
       localStorage.setItem('graphSketch', JSON.stringify(parsed));
     }
-    idbSaveRecordCompat(record);
+    idbSaveRecordCompat(saved);
   } catch (e) {
     console.warn('Could not mirror the current sketch into the library', e);
   }
@@ -1530,6 +1636,68 @@ function fallbackSketchTitle(rec) {
   }
   return String(rec.id);
 }
+
+// What the cloud sync layer uses to change this device's library.
+//
+// Its writes are not edits: nothing here bumps a rev or fires sketch:saved, so
+// a sketch arriving from another device is not immediately sent back. It keeps
+// IndexedDB in step, refreshes the sketch list if it is showing, and can reload
+// the open sketch when a newer version of it arrives.
+try {
+  window.sketchLibrary = {
+    list: () => getLibrary(),
+    openId: () => currentSketchId,
+    // The title the sketch list shows: its name, or its date.
+    title: (rec) => (rec && rec.name) || (rec ? fallbackSketchTitle(rec) : ''),
+    put(records) {
+      if (!records || !records.length) return;
+      const lib = getLibrary();
+      for (const rec of records) {
+        const idx = lib.findIndex((r) => String(r.id) === String(rec.id));
+        if (idx >= 0) lib[idx] = rec;
+        else lib.unshift(rec);
+        idbSaveRecordCompat(rec);
+      }
+      setLibrary(lib);
+      if (homePanel && homePanel.style.display === 'flex') renderHome();
+    },
+    // Several records' sync marks in one write: the library is one JSON value,
+    // and rewriting it once per sketch makes a first sign-in with a long list
+    // of sketches crawl.
+    patch(changes) {
+      if (!changes || !changes.length) return;
+      const lib = getLibrary();
+      const touched = [];
+      for (const { id, fields } of changes) {
+        const idx = lib.findIndex((r) => String(r.id) === String(id));
+        if (idx < 0) continue;
+        lib[idx] = { ...lib[idx], ...fields };
+        touched.push(lib[idx]);
+      }
+      if (!touched.length) return;
+      setLibrary(lib);
+      touched.forEach((rec) => idbSaveRecordCompat(rec));
+    },
+    // An edit still inside the autosave delay is on the canvas but not yet in
+    // the library. Sync reads the library, so it saves that edit first —
+    // otherwise it could take a newer version from the cloud over it.
+    flush() {
+      debouncedSaveToStorage.flush();
+    },
+    remove(ids) {
+      if (!ids || !ids.length) return;
+      const drop = new Set(ids.map(String));
+      setLibrary(getLibrary().filter((r) => !drop.has(String(r.id))));
+      ids.forEach((id) => idbDeleteRecordCompat(id));
+      if (homePanel && homePanel.style.display === 'flex') renderHome();
+    },
+    // loadFromLibrary re-saves the sketch, but with its drawing unchanged that
+    // is not an edit (withSyncMeta), so this does not bounce back to the cloud.
+    reloadOpen() {
+      if (currentSketchId) loadFromLibrary(currentSketchId);
+    },
+  };
+} catch (_) {}
 
 function renderHome() {
   if (!homePanel || !sketchListEl) return;
@@ -3861,18 +4029,34 @@ if (sketchListEl) {
       input.select();
       const commit = () => {
         const newVal = input.value.trim();
+        let name;
         if (newVal.length === 0) {
-          rec.name = null;
+          name = null;
         } else if (!hadExplicitName && newVal === originalTitle) {
           // User didn't change the fallback title; keep name as null
-          rec.name = null;
+          name = null;
         } else {
-          rec.name = newVal;
+          name = newVal;
         }
-        rec.updatedAt = new Date().toISOString();
-        setLibrary(lib);
-        if (currentSketchId === rec.id) {
-          currentSketchName = rec.name || null;
+        // Read the library afresh: sync may have changed it while the field was
+        // open, and writing back the copy read when it opened would undo that.
+        const fresh = getLibrary();
+        const at = fresh.findIndex((r) => r.id === id);
+        if (at < 0) {
+          renderHome();
+          return;
+        }
+        // A rename is an edit: it gets a new version, so it reaches this
+        // sketch on other devices (see withSyncMeta).
+        const renamed = withSyncMeta(fresh[at], { ...fresh[at], name, updatedAt: new Date().toISOString() });
+        fresh[at] = renamed;
+        setLibrary(fresh);
+        idbSaveRecordCompat(renamed);
+        try {
+          window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id } }));
+        } catch (_) {}
+        if (currentSketchId === id) {
+          currentSketchName = name || null;
           updateBoardTitle();
           saveToStorage();
         }
@@ -3904,9 +4088,21 @@ if (sketchListEl) {
       const lib = getLibrary();
       const rec = lib.find((r) => r.id === id);
       if (rec) {
-        const copy = { ...rec, id: generateSketchId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const nowIso = new Date().toISOString();
+        const copy = { ...rec, id: generateSketchId(), createdAt: nowIso, updatedAt: nowIso };
+        // A copy is a new sketch: it must not inherit the original's sync
+        // marks, or the sync layer would take it for one already in the cloud
+        // and never send it.
+        const rev = newRev();
+        copy.rev = rev;
+        copy.revs = [rev];
+        delete copy.syncedRev;
+        delete copy.ownerUid;
         lib.unshift(copy);
         setLibrary(lib);
+        try {
+          window.dispatchEvent(new CustomEvent('sketch:saved', { detail: { id: copy.id } }));
+        } catch (_) {}
         renderHome();
         showToast(t('toasts.duplicated'));
       }
@@ -4548,7 +4744,7 @@ async function init() {
   const hasLib = getLibrary().length > 0;
   if (hasLib) {
     renderHome();
-  } else if (loadFromStorage()) {
+  } else if (!startupSketchWasDeleted && loadFromStorage()) {
     startPanel.style.display = 'none';
     hideHome();
   } else {
@@ -4566,6 +4762,15 @@ async function init() {
   updateOrientationControls();
   if (editModeBtn) editModeBtn.classList.remove('active');
   resizeCanvas();
+  // With a library, startup shows the list and never draws graphSketch — but
+  // the last sketch stays current (currentSketchId), and the canvas was left
+  // empty. Anything that saved from there wrote an empty drawing over that
+  // sketch: Save, Send (which presses Save), or renaming it in the list. With
+  // sync, that empty drawing then replaced the sketch on every device. So the
+  // canvas behind the list holds the current sketch, as the library has it.
+  if (hasLib && currentSketchId && getLibrary().some((r) => r.id === currentSketchId)) {
+    loadFromLibrary(currentSketchId);
+  }
   renderDetails();
 }
 
