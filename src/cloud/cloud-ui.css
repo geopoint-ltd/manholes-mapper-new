@@ -1377,3 +1377,151 @@
   .office-progress.is-complete { color: #86efac; }
   .tag-picker__error { color: #fca5a5; }
 }
+
+/* ---------------- Trello ---------------- */
+
+/* Trello's own blue, so the button reads as "goes to Trello" at a glance. */
+.inbox-btn--trello,
+.inbox-btn--trello:hover {
+  color: #0c66e4;
+  border-color: rgba(12, 102, 228, 0.4);
+  text-decoration: none;
+}
+.inbox-btn--trello:hover { background: rgba(12, 102, 228, 0.08); }
+
+.trello-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.trello-step {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+.trello-step.is-current { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+/* A later step cannot be used before the one above it; say so by fading it. */
+.trello-step.is-locked { opacity: 0.55; }
+.trello-step__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.trello-step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  font-size: 0.8rem;
+}
+.trello-step.is-current .trello-step__num { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.trello-step.is-done .trello-step__num { background: #16a34a; border-color: #16a34a; color: #fff; }
+.trello-step__help {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+.trello-step__help a { color: var(--color-primary); }
+.trello-origin {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.6rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 9px;
+  background: var(--color-bg);
+  direction: ltr;
+}
+.trello-origin code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+.trello-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trello-row--wrap { flex-wrap: wrap; align-items: flex-end; }
+.trello-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.9rem;
+}
+.trello-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16); }
+.trello-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.trello-btn .material-icons { font-size: 18px; }
+.trello-me {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.trello-me .material-icons { font-size: 18px; color: #16a34a; }
+.trello-select { flex: 1 1 180px; margin: 0; }
+.trello-select span { display: block; margin-bottom: 0.3rem; font-size: 0.82rem; font-weight: 600; }
+.trello-select select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.trello-target {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #15803d;
+}
+.trello-target .material-icons { font-size: 17px; }
+@media (max-width: 640px) {
+  .trello-row { flex-wrap: wrap; }
+  .trello-row .trello-btn { flex: 1 1 100%; min-height: 44px; }
+  .trello-input,
+  .trello-select select { min-height: 44px; font-size: 16px; }
+}
+@media (prefers-color-scheme: dark) {
+  .inbox-btn--trello,
+  .inbox-btn--trello:hover { color: #85b8ff; }
+  .trello-target { color: #86efac; }
+}

@@ -25,8 +25,10 @@ import {
   addSketchTag,
   removeSketchTag,
   setOfficeFlag,
+  setTrelloCard,
   OFFICE_FLAGS,
 } from '../firebase/tags.js';
+import { startTrello, stopTrello, renderTrello, isTrelloReady, sendSketchToTrello } from './trello-panel.js';
 import { tagRow, tagChip, swatches, wireSwatches, openTagPicker, closeTagPicker } from './tag-picker.js';
 
 let el = null;
@@ -78,6 +80,7 @@ function build() {
         <button class="cloud-tab is-active" data-tab="members">${escapeHtml(t('cloud.tabMembers'))}</button>
         <button class="cloud-tab" data-tab="inbox">${escapeHtml(t('cloud.tabInbox'))}</button>
         <button class="cloud-tab" data-tab="tags">${escapeHtml(t('cloud.tabTags'))}</button>
+        <button class="cloud-tab" data-tab="trello">${escapeHtml(t('cloud.tabTrello'))}</button>
       </div>
       <div class="cloud-panel__body">
         <section class="cloud-panel__section is-active" data-section="members">
@@ -166,6 +169,9 @@ function build() {
             <span class="home-count" id="cloudTagCount"></span>
           </h3>
           <div class="cloud-list" id="cloudTagList"></div>
+        </section>
+        <section class="cloud-panel__section" data-section="trello">
+          <div id="cloudTrello"></div>
         </section>
       </div>
     </div>
@@ -323,6 +329,7 @@ function paintInbox(list, sketches) {
               <span class="material-icons" aria-hidden="true">download</span>
               <span>${escapeHtml(t('cloud.download'))}</span>
             </button>
+            ${trelloButton(office, path)}
             ${isStorageConfigured() ? `<button class="btn inbox-btn" data-act="files" data-uid="${escapeHtml(s.ownerUid || '')}" data-sketch="${escapeHtml(s.id)}">${escapeHtml(t('cloud.viewFiles'))}</button>` : ''}
             <button class="btn inbox-btn inbox-btn--danger" data-act="delete" data-path="${path}">
               <span class="material-icons" aria-hidden="true">delete_outline</span>
@@ -347,6 +354,31 @@ function paintInbox(list, sketches) {
       </article>`;
     })
     .join('');
+}
+
+/**
+ * "Add to Trello", or — once a card exists — a link to it. Only a trello.com
+ * address becomes a link; anything else stored there is ignored rather than
+ * rendered as an href.
+ */
+function trelloButton(office, path) {
+  const url = String(office.trelloCardUrl || '');
+  if (/^https:\/\/trello\.com\//.test(url)) {
+    return `<a class="btn inbox-btn inbox-btn--trello" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+        <span class="material-icons" aria-hidden="true">open_in_new</span>
+        <span>${escapeHtml(t('cloud.openInTrello'))}</span>
+      </a>`;
+  }
+  return `<button class="btn inbox-btn inbox-btn--trello" data-act="trello" data-path="${path}">
+      <span class="material-icons" aria-hidden="true">view_week</span>
+      <span>${escapeHtml(t('cloud.addToTrello'))}</span>
+    </button>`;
+}
+
+/** Switch the panel to a tab, as if its button were clicked. */
+function showTab(name) {
+  const tab = el && el.querySelector(`.cloud-tab[data-tab="${name}"]`);
+  if (tab) tab.click();
 }
 
 /* ---------------- tags tab ---------------- */
@@ -548,6 +580,7 @@ function wire() {
       );
       if (name === 'inbox') renderInbox();
       else if (name === 'tags') renderTagsTab();
+      else if (name === 'trello') renderTrello(el.querySelector('#cloudTrello'));
       else refreshUsers();
     });
   });
@@ -637,6 +670,32 @@ function wire() {
     const openBtn = event.target.closest('button[data-act="open"]');
     if (openBtn) {
       openInEditor(openBtn.getAttribute('data-path'));
+      return;
+    }
+    const trelloBtn = event.target.closest('button[data-act="trello"]');
+    if (trelloBtn) {
+      const target = inboxCache.get(trelloBtn.getAttribute('data-path'));
+      if (!target) return;
+      if (!isTrelloReady()) {
+        // Nothing can be sent until the setup is complete; take them to it.
+        toast(t('cloud.trelloNotReady'));
+        showTab('trello');
+        return;
+      }
+      const label = trelloBtn.querySelector('span:last-child');
+      const before = label ? label.textContent : '';
+      trelloBtn.disabled = true;
+      if (label) label.textContent = t('cloud.sendingToTrello');
+      sendSketchToTrello(target, panelTags, formatWhen(target.submittedAt))
+        .then(async (card) => {
+          await setTrelloCard(target.ownerUid, target.id, card);
+          toast(card.attachFailed ? t('cloud.trelloAttachFailed') : t('cloud.trelloAdded'));
+        })
+        .catch((err) => {
+          trelloBtn.disabled = false;
+          if (label) label.textContent = before;
+          toast((err && err.message) || String(err));
+        });
       return;
     }
     const delBtn = event.target.closest('button[data-act="delete"]');
@@ -759,11 +818,13 @@ export function openAdminPanel() {
   el.querySelector('#cloudNewPassword').value = suggestPassword();
   el.classList.add('is-open');
   startPanelTags();
+  startTrello();
   refreshUsers();
 }
 
 export function closeAdminPanel() {
   stopInboxSubscription();
   stopPanelTags();
+  stopTrello();
   if (el) el.classList.remove('is-open');
 }

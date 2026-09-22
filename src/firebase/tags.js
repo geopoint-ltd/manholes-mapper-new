@@ -162,3 +162,22 @@ export async function setOfficeFlag(ownerUid, sketchId, flag, value) {
     officeUpdatedBy: profile.uid,
   });
 }
+
+/**
+ * Record that a sketch now has a Trello card, and tick "added to Trello".
+ * Admin only. The card's address is kept so the button becomes "open in
+ * Trello", which is also what stops a second click making a second card.
+ */
+export async function setTrelloCard(ownerUid, sketchId, { id, url }) {
+  assertAdmin();
+  const profile = requireProfile();
+  const db = await getDb();
+  const firestore = await import('firebase/firestore');
+  await firestore.updateDoc(sketchRef(firestore, db, ownerUid, sketchId), {
+    'office.inTrello': true,
+    'office.trelloCardId': String(id),
+    'office.trelloCardUrl': String(url),
+    officeUpdatedAt: firestore.serverTimestamp(),
+    officeUpdatedBy: profile.uid,
+  });
+}
