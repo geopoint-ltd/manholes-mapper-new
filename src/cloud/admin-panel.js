@@ -686,14 +686,29 @@ function wire() {
       const before = label ? label.textContent : '';
       trelloBtn.disabled = true;
       if (label) label.textContent = t('cloud.sendingToTrello');
-      sendSketchToTrello(target, panelTags, formatWhen(target.submittedAt))
-        .then(async (card) => {
-          await setTrelloCard(target.ownerUid, target.id, card);
+      let created = false;
+      sendSketchToTrello(target, panelTags, formatWhen(target.submittedAt), {
+        onCardCreated: (card) => {
+          created = true;
+          // The card exists: show it now, as the link it will be from here on.
+          // Neither the ZIP upload nor the database confirming the record gets
+          // to hold the button — the live inbox repaints the same link anyway.
+          trelloBtn.outerHTML = trelloButton({ trelloCardUrl: card.url }, escapeHtml(target.path));
+          // Firestore queues the write and retries it; if it is refused outright,
+          // say so, because then the app will offer to create the card again.
+          setTrelloCard(target.ownerUid, target.id, card).catch((err) => {
+            toast(`${t('cloud.trelloNotRecorded')}: ${(err && err.message) || err}`);
+          });
+        },
+      })
+        .then((card) => {
           toast(card.attachFailed ? t('cloud.trelloAttachFailed') : t('cloud.trelloAdded'));
         })
         .catch((err) => {
-          trelloBtn.disabled = false;
-          if (label) label.textContent = before;
+          if (!created) {
+            trelloBtn.disabled = false;
+            if (label) label.textContent = before;
+          }
           toast((err && err.message) || String(err));
         });
       return;

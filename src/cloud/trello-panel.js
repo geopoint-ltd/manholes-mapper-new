@@ -16,7 +16,8 @@ import {
   getMe,
   listBoards,
   listLists,
-  createSketchCard,
+  createCard,
+  attachFile,
 } from './trello.js';
 import { buildSketchZip, sketchDisplayName } from './sketch-zip.js';
 
@@ -321,9 +322,16 @@ function describe(sketch, tags, when) {
 
 /**
  * Put one received sketch on the office's Trello list.
+ *
+ * onCardCreated runs the moment the card exists, before the ZIP upload: that is
+ * when the office should see it, and when the app should record it. Waiting for
+ * the upload — and for the database to confirm the record — is what left the
+ * button spinning over a card that was already there.
+ *
+ * @param {{onCardCreated?: (card: {id: string, url: string}) => void}} [hooks]
  * @returns {Promise<{id: string, url: string, attachFailed: boolean}>}
  */
-export async function sendSketchToTrello(sketch, tagCatalog, when) {
+export async function sendSketchToTrello(sketch, tagCatalog, when, hooks = {}) {
   const key = settings.apiKey;
   const token = getToken();
   if (!isTrelloReady()) throw new Error('trello-not-ready');
@@ -332,8 +340,9 @@ export async function sendSketchToTrello(sketch, tagCatalog, when) {
   const adminConfig = typeof window.getAdminConfig === 'function' ? window.getAdminConfig() : null;
   const zip = await buildSketchZip(sketch, adminConfig, t);
   const owner = String(sketch.ownerEmail || '').split('@')[0];
+  let card;
   try {
-    return await createSketchCard({
+    card = await createCard({
       key,
       token,
       boardId: settings.boardId,
@@ -342,7 +351,6 @@ export async function sendSketchToTrello(sketch, tagCatalog, when) {
       name: owner ? `${sketchDisplayName(sketch)} · ${owner}` : sketchDisplayName(sketch),
       desc: describe(sketch, tags, when),
       labels: tags.map((tag) => ({ name: tag.name, color: tag.color })),
-      zip,
     });
   } catch (err) {
     if (err && err.code === 401) {
@@ -353,4 +361,13 @@ export async function sendSketchToTrello(sketch, tagCatalog, when) {
     }
     throw err;
   }
+  if (typeof hooks.onCardCreated === 'function') {
+    try {
+      hooks.onCardCreated(card);
+    } catch (_) {}
+  }
+  const attached = zip && zip.blob
+    ? await attachFile({ key, token, cardId: card.id, blob: zip.blob, filename: zip.filename })
+    : true;
+  return { ...card, attachFailed: !attached };
 }

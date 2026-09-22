@@ -56,7 +56,7 @@ export function forgetToken() {
  * requests, with no CORS preflight, and keeps a long card description out of
  * the URL.
  */
-async function api(method, path, { key, token, query = {}, form, body } = {}) {
+async function api(method, path, { key, token, query = {}, form, body, timeoutMs = 30000 } = {}) {
   const url = new URL(API + path);
   Object.entries({ ...query, key, token }).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -68,7 +68,18 @@ async function api(method, path, { key, token, query = {}, form, body } = {}) {
       if (v !== undefined && v !== null && v !== '') payload.set(k, String(v));
     });
   }
-  const res = await fetch(url, { method, body: payload });
+  // A request that never answers must not hold the office's button forever.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(url, { method, body: payload, signal: abort.signal });
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw new Error('trello-timeout');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401) {
     const err = new Error('trello-unauthorized');
     err.code = 401;
@@ -192,32 +203,38 @@ async function ensureLabels(key, token, boardId, labels) {
 }
 
 /**
- * Create a card for a sketch: title, description, labels, and the ZIP.
- *
- * The card is created before the attachment is uploaded, so a failed upload
- * leaves a usable card rather than nothing; the caller is told, and the office
- * can drag the ZIP onto the card by hand.
- *
- * @returns {Promise<{id: string, url: string, attachFailed: boolean}>}
+ * Create a card for a sketch: title, description and labels.
+ * @returns {Promise<{id: string, url: string}>}
  */
-export async function createSketchCard({ key, token, boardId, listId, name, desc, labels = [], zip }) {
+export async function createCard({ key, token, boardId, listId, name, desc, labels = [] }) {
   const idLabels = await ensureLabels(key, token, boardId, labels);
   const card = await api('POST', '/cards', {
     key,
     token,
     form: { idList: listId, name, desc, pos: 'top', idLabels: idLabels.join(',') },
   });
-  let attachFailed = false;
-  if (zip && zip.blob) {
-    try {
-      const data = new FormData();
-      data.append('file', zip.blob, zip.filename);
-      data.append('name', zip.filename);
-      data.append('mimeType', 'application/zip');
-      await api('POST', `/cards/${card.id}/attachments`, { key, token, body: data });
-    } catch (_) {
-      attachFailed = true;
-    }
+  return { id: card.id, url: card.shortUrl || card.url };
+}
+
+/**
+ * Attach a file to a card. Its own step, after the card exists, so a slow or
+ * failed upload can never cost the card — or hold up saying that it exists.
+ * @returns {Promise<boolean>} whether it attached
+ */
+export async function attachFile({ key, token, cardId, blob, filename }) {
+  try {
+    const data = new FormData();
+    data.append('file', blob, filename);
+    data.append('name', filename);
+    data.append('mimeType', 'application/zip');
+    await api('POST', `/cards/${encodeURIComponent(cardId)}/attachments`, {
+      key,
+      token,
+      body: data,
+      timeoutMs: 60000,
+    });
+    return true;
+  } catch (_) {
+    return false;
   }
-  return { id: card.id, url: card.shortUrl || card.url, attachFailed };
 }
